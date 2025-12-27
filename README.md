@@ -447,7 +447,6 @@ This library generates VTF version 7.2 files with 80-byte headers. This format i
 - [VTFEdit](https://developer.valvesoftware.com/wiki/VTFEdit)
 - Garry's Mod
 - Counter-Strike: Source
-- Counter-Strike: Global Offensive
 - Team Fortress 2
 - Half-Life 2 and episodes
 - Portal / Portal 2
