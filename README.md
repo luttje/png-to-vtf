@@ -37,10 +37,10 @@ For browser usage via CDN:
 
 ## Quick Start
 
-### Node.js
+### Node.js (ES Modules)
 
 ```javascript
-const { convertPNGToVTF, VTF_FORMATS } = require('png-to-vtf');
+import { convertPNGToVTF, VTF_FORMATS } from 'png-to-vtf';
 
 // Simple conversion
 await convertPNGToVTF('input.png', 'output.vtf');
@@ -52,6 +52,25 @@ await convertPNGToVTF('input.png', 'output.vtf', {
     height: 512,
     clampToPowerOf2: true  // Auto-resize to power of 2
 });
+```
+
+### Node.js (CommonJS)
+
+```javascript
+const { convertPNGToVTF, VTF_FORMATS } = require('png-to-vtf');
+
+(async () => {
+    // Simple conversion
+    await convertPNGToVTF('input.png', 'output.vtf');
+
+    // With options
+    await convertPNGToVTF('input.png', 'output.vtf', {
+        format: VTF_FORMATS.BGRA8888,
+        width: 512,
+        height: 512,
+        clampToPowerOf2: true
+    });
+})();
 ```
 
 ### Browser
@@ -98,7 +117,7 @@ Converts a PNG file to VTF format and saves it to disk. **Node.js only** - requi
 **Example:**
 
 ```javascript
-const { convertPNGToVTF, VTF_FORMATS, VTF_FLAGS } = require('png-to-vtf');
+import { convertPNGToVTF, VTF_FORMATS, VTF_FLAGS } from 'png-to-vtf';
 
 const result = await convertPNGToVTF('texture.png', 'texture.vtf', {
     format: VTF_FORMATS.BGR888,
@@ -127,8 +146,8 @@ Converts a PNG buffer to VTF format and returns the VTF data as a buffer. **Node
 **Example:**
 
 ```javascript
-const fs = require('fs');
-const { convertPNGBufferToVTF, VTF_FORMATS } = require('png-to-vtf');
+import fs from 'fs';
+import { convertPNGBufferToVTF, VTF_FORMATS } from 'png-to-vtf';
 
 const pngData = fs.readFileSync('texture.png');
 const vtfData = await convertPNGBufferToVTF(pngData, {
@@ -170,7 +189,7 @@ Converts raw RGBA pixel data to VTF format.
 **Example:**
 
 ```javascript
-const { convertRGBAToVTF, VTF_FORMATS } = require('png-to-vtf');
+import { convertRGBAToVTF, VTF_FORMATS } from 'png-to-vtf';
 
 // Create a 2x2 red texture
 const rgbaData = Buffer.from([
@@ -383,7 +402,7 @@ Texture flags that control rendering behavior:
 **Example:**
 
 ```javascript
-const { VTF_FLAGS } = require('png-to-vtf');
+import { VTF_FLAGS } from 'png-to-vtf';
 
 // Combine flags with bitwise OR
 const flags = VTF_FLAGS.TRILINEAR | VTF_FLAGS.ANISOTROPIC | VTF_FLAGS.EIGHTBITALPHA;
@@ -394,14 +413,15 @@ const flags = VTF_FLAGS.TRILINEAR | VTF_FLAGS.ANISOTROPIC | VTF_FLAGS.EIGHTBITAL
 ### Utility Functions
 
 ```javascript
-const {
+import {
     isPowerOf2,
     nextPowerOf2,
     getBytesPerPixel,
     calculateMipmapCount,
     convertToFormat,
-    generateMipmaps
-} = require('png-to-vtf');
+    generateMipmaps,
+    VTF_FORMATS
+} from 'png-to-vtf';
 
 // Check if dimensions are valid
 isPowerOf2(256);  // true
@@ -434,6 +454,8 @@ For best compatibility with Source engine games, texture dimensions should be po
 Use the `width` and `height` options to resize images, or set `clampToPowerOf2: true` to automatically resize to the nearest power of 2.
 
 ```javascript
+import { convertPNGToVTF } from 'png-to-vtf';
+
 // Auto-resize any image to valid dimensions
 await convertPNGToVTF('any-size.png', 'output.vtf', {
     clampToPowerOf2: true
@@ -460,6 +482,8 @@ By default, mipmaps are automatically generated. Mipmaps are smaller versions of
 To disable mipmap generation:
 
 ```javascript
+import { convertPNGToVTF } from 'png-to-vtf';
+
 await convertPNGToVTF('input.png', 'output.vtf', {
     generateMips: false
 });
