@@ -214,19 +214,15 @@
       right: 0;
       bottom: 0;
       background: rgba(26, 26, 46, 0.9);
-      display: flex;
+      display: none;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       z-index: 1000;
-      opacity: 0;
-      visibility: hidden;
-      transition: opacity 0.2s ease, visibility 0.2s ease;
     }
 
     .loading-overlay.active {
-      opacity: 1;
-      visibility: visible;
+      display: flex;
     }
 
     .spinner {
@@ -293,6 +289,13 @@
           <option value="RGB888">RGB888 (Uncompressed, No Alpha)</option>
           <option value="BGR888">BGR888 (Uncompressed, No Alpha)</option>
         </select>
+        <div class="checkbox-group"
+             style="margin-top: 0.75rem;">
+          <input type="checkbox"
+                 id="mipmaps"
+                 checked>
+          <label for="mipmaps">Generate Mipmaps</label>
+        </div>
       </div>
 
       <div class="option-group">
@@ -306,15 +309,23 @@
           <option value="1024">1024 × 1024</option>
           <option value="2048">2048 × 2048</option>
         </select>
-      </div>
-
-      <div class="option-group">
-        <label>Options</label>
-        <div class="checkbox-group">
+        <div class="checkbox-group"
+             style="margin-top: 0.75rem;">
           <input type="checkbox"
-                 id="mipmaps"
-                 checked>
-          <label for="mipmaps">Generate Mipmaps</label>
+                 id="keepAspect">
+          <label for="keepAspect">Keep Aspect Ratio</label>
+        </div>
+        <div id="alignmentGroup"
+             style="margin-top: 0.75rem; display: none;">
+          <label for="alignment"
+                 style="font-size: 0.8rem;">Alignment</label>
+          <select id="alignment">
+            <option value="top">Top</option>
+            <option value="left">Left</option>
+            <option value="center">Center</option>
+            <option value="right">Right</option>
+            <option value="bottom">Bottom</option>
+          </select>
         </div>
       </div>
     </div>
@@ -371,12 +382,15 @@
     const formatSelect = document.getElementById('format');
     const resizeSelect = document.getElementById('resize');
     const mipmapsCheckbox = document.getElementById('mipmaps');
+    const keepAspectCheckbox = document.getElementById('keepAspect');
     const loadingOverlay = document.getElementById('loadingOverlay');
     const loadingText = document.getElementById('loadingText');
     const loadingSubtext = document.getElementById('loadingSubtext');
+    const alignmentSelect = document.getElementById('alignment');
+    const alignmentGroup = document.getElementById('alignmentGroup');
 
-    let currentVtfBuffer = null;
     let currentFileName = 'texture.vtf';
+    let currentImageData = null;
 
     // Loading overlay helpers
     function showLoading(text = 'Processing...', subtext = 'This may take a moment for large images') {
@@ -387,11 +401,6 @@
 
     function hideLoading() {
       loadingOverlay.classList.remove('active');
-    }
-
-    // Helper to defer work and allow UI to update
-    function defer() {
-      return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     }
 
     // Drop zone events
@@ -421,16 +430,52 @@
       }
     });
 
-    // Re-convert when options change
-    formatSelect.addEventListener('change', reconvert);
-    resizeSelect.addEventListener('change', reconvert);
-    mipmapsCheckbox.addEventListener('change', reconvert);
+    function updateAlignmentVisibility() {
+      if (!currentImageData || !keepAspectCheckbox.checked) {
+        alignmentGroup.style.display = 'none';
+        return;
+      }
 
-    let currentImageData = null;
+      const width = currentImageData.width;
+      const height = currentImageData.height;
+
+      if (width === height) {
+        // Square image - no alignment needed
+        alignmentGroup.style.display = 'none';
+      } else if (height > width) {
+        // Taller than wide - show horizontal alignment options
+        alignmentGroup.style.display = 'block';
+        alignmentSelect.innerHTML = `
+          <option value="left">Left</option>
+          <option value="center" selected>Center</option>
+          <option value="right">Right</option>
+        `;
+      } else {
+        // Wider than tall - show vertical alignment options
+        alignmentGroup.style.display = 'block';
+        alignmentSelect.innerHTML = `
+          <option value="top">Top</option>
+          <option value="center" selected>Center</option>
+          <option value="bottom">Bottom</option>
+        `;
+      }
+    }
+
+    // Update preview when options change
+    formatSelect.addEventListener('change', () => updatePreviewWithLoading());
+    resizeSelect.addEventListener('change', () => updatePreviewWithLoading());
+    mipmapsCheckbox.addEventListener('change', () => updatePreviewWithLoading());
+    keepAspectCheckbox.addEventListener('change', async () => {
+      updateAlignmentVisibility();
+      await updatePreviewWithLoading();
+    });
+    alignmentSelect.addEventListener('change', () => updatePreviewWithLoading());
+    updateAlignmentVisibility();
 
     async function handleFile(file) {
       showStatus('', '');
-      showLoading('Loading image...', file.name);
+      showLoading('Loading image...', 'Please wait');
+      await yieldToMain();
 
       // Store filename for download
       currentFileName = file.name.replace(/\.[^.]+$/, '.vtf');
@@ -451,62 +496,155 @@
         currentImageData = ctx.getImageData(0, 0, img.width, img.height);
 
         previewContainer.classList.add('active');
-
-        showLoading('Converting to VTF...', `${img.width} × ${img.height} pixels`);
-        await defer(); // Allow UI to update before heavy conversion
-        await convertToVtf();
+        updateAlignmentVisibility();
+        await updatePreview();
         hideLoading();
       };
 
       img.onerror = () => {
-        hideLoading();
         showStatus('Failed to load image', 'error');
       };
 
       img.src = URL.createObjectURL(file);
     }
 
-    async function reconvert() {
-      if (currentImageData) {
-        showLoading('Converting to VTF...', 'Applying new settings');
-        await defer();
-        await convertToVtf();
-        hideLoading();
+    // Get processed image data based on current settings
+    function getProcessedImageData() {
+      const resize = resizeSelect.value ? parseInt(resizeSelect.value) : null;
+
+      let imageData = currentImageData;
+      let finalWidth = currentImageData.width;
+      let finalHeight = currentImageData.height;
+
+      if (resize && (resize !== currentImageData.width || resize !== currentImageData.height)) {
+        // Resize using Canvas API
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = currentImageData.width;
+        tempCanvas.height = currentImageData.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.putImageData(currentImageData, 0, 0);
+
+        const resizeCanvas = document.createElement('canvas');
+        resizeCanvas.width = resize;
+        resizeCanvas.height = resize;
+        const resizeCtx = resizeCanvas.getContext('2d');
+
+        // Clear canvas with transparent pixels
+        resizeCtx.clearRect(0, 0, resize, resize);
+
+        if (keepAspectCheckbox.checked) {
+          // Keep aspect ratio: scale to fit and align based on selection
+          const srcWidth = currentImageData.width;
+          const srcHeight = currentImageData.height;
+          const scale = Math.min(resize / srcWidth, resize / srcHeight);
+          const scaledWidth = srcWidth * scale;
+          const scaledHeight = srcHeight * scale;
+
+          // Calculate offset based on alignment
+          const alignment = alignmentSelect.value;
+          let offsetX, offsetY;
+
+          // Horizontal alignment
+          if (alignment.includes('left')) {
+            offsetX = 0;
+          } else if (alignment.includes('right')) {
+            offsetX = resize - scaledWidth;
+          } else {
+            offsetX = (resize - scaledWidth) / 2;
+          }
+
+          // Vertical alignment
+          if (alignment.includes('top')) {
+            offsetY = 0;
+          } else if (alignment.includes('bottom')) {
+            offsetY = resize - scaledHeight;
+          } else {
+            offsetY = (resize - scaledHeight) / 2;
+          }
+
+          resizeCtx.drawImage(tempCanvas, offsetX, offsetY, scaledWidth, scaledHeight);
+        } else {
+          // Stretch to fill
+          resizeCtx.drawImage(tempCanvas, 0, 0, resize, resize);
+        }
+
+        imageData = resizeCtx.getImageData(0, 0, resize, resize);
+        finalWidth = resize;
+        finalHeight = resize;
       }
+
+      return { imageData, finalWidth, finalHeight };
     }
 
-    async function convertToVtf() {
+    // Helper to yield to browser for UI updates - must wait for actual paint
+    function yieldToMain() {
+      return new Promise(resolve => {
+        // requestAnimationFrame schedules for next frame, then setTimeout ensures we're after paint
+        requestAnimationFrame(() => {
+          setTimeout(resolve, 50);
+        });
+      });
+    }
+
+    async function updatePreviewWithLoading() {
+      if (!currentImageData) return;
+      showLoading('Updating preview...', 'Processing image');
+      await yieldToMain();
+      await updatePreview();
+      hideLoading();
+    }
+
+    async function updatePreview() {
+      if (!currentImageData) return;
+
+      const format = formatSelect.value;
+      const mipmaps = mipmapsCheckbox.checked;
+      const { imageData, finalWidth, finalHeight } = getProcessedImageData();
+
+      // Show VTF info (estimated)
+      const mipmapCount = mipmaps ? Math.floor(Math.log2(Math.max(finalWidth, finalHeight))) + 1 : 1;
+
+      vtfInfo.innerHTML = `
+        ${finalWidth} × ${finalHeight} pixels<br>
+        Format: ${format}<br>
+        Mipmaps: ${mipmapCount}
+      `;
+
+      // Draw preview using the processed image data
+      const ctx = vtfPreview.getContext('2d');
+
+      // Scale preview to fit within 256x256
+      const scale = Math.min(256 / finalWidth, 256 / finalHeight, 1);
+      const previewWidth = finalWidth * scale;
+      const previewHeight = finalHeight * scale;
+      vtfPreview.width = previewWidth;
+      vtfPreview.height = previewHeight;
+
+      // Draw the processed image
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = imageData.width;
+      tempCanvas.height = imageData.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCtx.putImageData(imageData, 0, 0);
+
+      ctx.drawImage(tempCanvas, 0, 0, previewWidth, previewHeight);
+
+      downloadBtn.disabled = false;
+      showStatus('', '');
+    }
+
+    downloadBtn.addEventListener('click', async () => {
+      if (!currentImageData) return;
+
+      showLoading('Converting to VTF...', 'Please wait');
+
+      // Defer to allow UI to paint the loading overlay
+      await yieldToMain();
+
       try {
-        downloadBtn.disabled = true;
-        showStatus('Converting...', 'success');
-
         const format = formatSelect.value;
-        const resize = resizeSelect.value ? parseInt(resizeSelect.value) : null;
         const mipmaps = mipmapsCheckbox.checked;
-
-        // Get the image data to convert (resize if needed)
-        let imageDataToConvert = currentImageData;
-        let finalWidth = currentImageData.width;
-        let finalHeight = currentImageData.height;
-
-        if (resize && (resize !== currentImageData.width || resize !== currentImageData.height)) {
-          // Resize using Canvas API
-          const tempCanvas = document.createElement('canvas');
-          tempCanvas.width = currentImageData.width;
-          tempCanvas.height = currentImageData.height;
-          const tempCtx = tempCanvas.getContext('2d');
-          tempCtx.putImageData(currentImageData, 0, 0);
-
-          const resizeCanvas = document.createElement('canvas');
-          resizeCanvas.width = resize;
-          resizeCanvas.height = resize;
-          const resizeCtx = resizeCanvas.getContext('2d');
-          resizeCtx.drawImage(tempCanvas, 0, 0, resize, resize);
-
-          imageDataToConvert = resizeCtx.getImageData(0, 0, resize, resize);
-          finalWidth = resize;
-          finalHeight = resize;
-        }
+        const { imageData } = getProcessedImageData();
 
         // Prepare options
         const options = {
@@ -519,66 +657,27 @@
         }
 
         // Convert using browser-compatible API
-        const vtfBuffer = convertImageDataToVTF(imageDataToConvert, options);
+        const vtfBuffer = convertImageDataToVTF(imageData, options);
 
-        currentVtfBuffer = vtfBuffer;
+        // Download immediately
+        const blob = new Blob([vtfBuffer], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = currentFileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
 
-        // Show VTF info
-        const mipmapCount = mipmaps ? Math.floor(Math.log2(Math.max(
-          finalWidth,
-          finalHeight
-        ))) + 1 : 1;
-
-        vtfInfo.innerHTML = `
-          ${finalWidth} × ${finalHeight} pixels<br>
-          Format: ${format}<br>
-          Mipmaps: ${mipmapCount}<br>
-          Size: ${(vtfBuffer.byteLength / 1024).toFixed(1)} KB
-        `;
-
-        // Draw preview of VTF (just show the original since we can't decode VTF in browser easily)
-        const ctx = vtfPreview.getContext('2d');
-        vtfPreview.width = finalWidth > 256 ? 256 : finalWidth;
-        vtfPreview.height = finalHeight > 256 ? 256 : finalHeight;
-
-        // Scale preview
-        const scale = Math.min(256 / finalWidth, 256 / finalHeight, 1);
-        const previewWidth = finalWidth * scale;
-        const previewHeight = finalHeight * scale;
-        vtfPreview.width = previewWidth;
-        vtfPreview.height = previewHeight;
-
-        // Draw scaled version
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = currentImageData.width;
-        tempCanvas.height = currentImageData.height;
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.putImageData(currentImageData, 0, 0);
-
-        ctx.drawImage(tempCanvas, 0, 0, previewWidth, previewHeight);
-
-        downloadBtn.disabled = false;
-        showStatus('✅ Conversion successful!', 'success');
+        hideLoading();
+        showStatus(`✅ Downloaded ${currentFileName} (${(vtfBuffer.byteLength / 1024).toFixed(1)} KB)`, 'success');
 
       } catch (error) {
+        hideLoading();
         console.error('Conversion error:', error);
         showStatus(`❌ Error: ${error.message}`, 'error');
-        downloadBtn.disabled = true;
       }
-    }
-
-    downloadBtn.addEventListener('click', () => {
-      if (!currentVtfBuffer) return;
-
-      const blob = new Blob([currentVtfBuffer], { type: 'application/octet-stream' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = currentFileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
     });
 
     function showStatus(message, type) {
