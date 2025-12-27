@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0">
+  <title>PNG to VTF Converter - Browser Demo</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      color: #e0e0e0;
+    }
+
+    h1 {
+      color: #ff6b35;
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #888;
+      margin-bottom: 2rem;
+    }
+
+    .container {
+      background: #1e1e2e;
+      border-radius: 12px;
+      padding: 2rem;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    .drop-zone {
+      border: 3px dashed #444;
+      border-radius: 12px;
+      padding: 3rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background: #252535;
+    }
+
+    .drop-zone:hover,
+    .drop-zone.dragover {
+      border-color: #ff6b35;
+      background: #2a2a3a;
+    }
+
+    .drop-zone-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+
+    .options {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin: 1.5rem 0;
+    }
+
+    .option-group {
+      background: #252535;
+      padding: 1rem;
+      border-radius: 8px;
+    }
+
+    .option-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+      color: #aaa;
+      font-size: 0.875rem;
+    }
+
+    select,
+    input[type="checkbox"] {
+      width: 100%;
+      padding: 0.5rem;
+      border: 1px solid #444;
+      border-radius: 6px;
+      background: #1e1e2e;
+      color: #e0e0e0;
+      font-size: 1rem;
+    }
+
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .checkbox-group input[type="checkbox"] {
+      width: auto;
+    }
+
+    .preview-container {
+      display: none;
+      margin-top: 2rem;
+    }
+
+    .preview-container.active {
+      display: block;
+    }
+
+    .preview-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    .preview-box {
+      background: #252535;
+      padding: 1rem;
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .preview-box h3 {
+      margin: 0 0 1rem 0;
+      color: #ff6b35;
+      font-size: 1rem;
+    }
+
+    .preview-box img,
+    .preview-box canvas {
+      max-width: 100%;
+      max-height: 256px;
+      border-radius: 4px;
+      background: repeating-conic-gradient(#333 0% 25%, #444 0% 50%) 50% / 16px 16px;
+    }
+
+    .info {
+      margin-top: 1rem;
+      font-size: 0.875rem;
+      color: #888;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 0.75rem 1.5rem;
+      background: #ff6b35;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.3s;
+      text-decoration: none;
+    }
+
+    .btn:hover {
+      background: #ff8555;
+    }
+
+    .btn:disabled {
+      background: #555;
+      cursor: not-allowed;
+    }
+
+    .actions {
+      margin-top: 1.5rem;
+      text-align: center;
+    }
+
+    .status {
+      margin-top: 1rem;
+      padding: 1rem;
+      border-radius: 8px;
+      display: none;
+    }
+
+    .status.success {
+      display: block;
+      background: rgba(46, 204, 113, 0.2);
+      border: 1px solid #2ecc71;
+      color: #2ecc71;
+    }
+
+    .status.error {
+      display: block;
+      background: rgba(231, 76, 60, 0.2);
+      border: 1px solid #e74c3c;
+      color: #e74c3c;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 2rem;
+      color: #666;
+    }
+
+    footer a {
+      color: #ff6b35;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>🎮 PNG to VTF Converter</h1>
+  <p class="subtitle">Convert PNG images to Valve Texture Format in your browser</p>
+
+  <div class="container">
+    <div class="drop-zone"
+         id="dropZone">
+      <div class="drop-zone-icon">📁</div>
+      <p>Drag & drop a PNG image here<br>or click to select</p>
+      <input type="file"
+             id="fileInput"
+             accept="image/png,image/jpeg,image/webp"
+             hidden>
+    </div>
+
+    <div class="options">
+      <div class="option-group">
+        <label for="format">Output Format</label>
+        <select id="format">
+          <option value="DXT5">DXT5 (Compressed with Alpha)</option>
+          <option value="DXT1">DXT1 (Compressed, No Alpha)</option>
+          <option value="BGRA8888">BGRA8888 (Uncompressed)</option>
+          <option value="RGB888">RGB888 (Uncompressed, No Alpha)</option>
+          <option value="BGR888">BGR888 (Uncompressed, No Alpha)</option>
+        </select>
+      </div>
+
+      <div class="option-group">
+        <label for="resize">Resize</label>
+        <select id="resize">
+          <option value="">Keep Original</option>
+          <option value="64">64 × 64</option>
+          <option value="128">128 × 128</option>
+          <option value="256">256 × 256</option>
+          <option value="512">512 × 512</option>
+          <option value="1024">1024 × 1024</option>
+          <option value="2048">2048 × 2048</option>
+        </select>
+      </div>
+
+      <div class="option-group">
+        <label>Options</label>
+        <div class="checkbox-group">
+          <input type="checkbox"
+                 id="mipmaps"
+                 checked>
+          <label for="mipmaps">Generate Mipmaps</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="preview-container"
+         id="previewContainer">
+      <div class="preview-grid">
+        <div class="preview-box">
+          <h3>📷 Original Image</h3>
+          <img id="originalPreview"
+               alt="Original">
+          <div class="info"
+               id="originalInfo"></div>
+        </div>
+        <div class="preview-box">
+          <h3>🎮 VTF Preview</h3>
+          <canvas id="vtfPreview"></canvas>
+          <div class="info"
+               id="vtfInfo"></div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn"
+                id="downloadBtn"
+                disabled>⬇️ Download VTF</button>
+      </div>
+
+      <div class="status"
+           id="status"></div>
+    </div>
+  </div>
+
+  <footer>
+    <p>
+      Powered by <a href="https://github.com/luttje/png-to-vtf"
+         target="_blank">png-to-vtf</a> |
+      Works with Source engine games like Garry's Mod, CS:GO, TF2, and Half-Life 2
+    </p>
+  </footer>
+
+  <script type="module">
+    import { convertImageDataToVTF, VTF_FORMATS, VTF_FLAGS } from './png-to-vtf.browser.min.mjs';
+
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const previewContainer = document.getElementById('previewContainer');
+    const originalPreview = document.getElementById('originalPreview');
+    const vtfPreview = document.getElementById('vtfPreview');
+    const originalInfo = document.getElementById('originalInfo');
+    const vtfInfo = document.getElementById('vtfInfo');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const statusEl = document.getElementById('status');
+    const formatSelect = document.getElementById('format');
+    const resizeSelect = document.getElementById('resize');
+    const mipmapsCheckbox = document.getElementById('mipmaps');
+
+    let currentVtfBuffer = null;
+    let currentFileName = 'texture.vtf';
+
+    // Drop zone events
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('dragover');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        handleFile(files[0]);
+      }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        handleFile(e.target.files[0]);
+      }
+    });
+
+    // Re-convert when options change
+    formatSelect.addEventListener('change', reconvert);
+    resizeSelect.addEventListener('change', reconvert);
+    mipmapsCheckbox.addEventListener('change', reconvert);
+
+    let currentImageData = null;
+
+    async function handleFile(file) {
+      showStatus('', '');
+
+      // Store filename for download
+      currentFileName = file.name.replace(/\.[^.]+$/, '.vtf');
+
+      // Load image
+      const img = new Image();
+      img.onload = async () => {
+        // Show original preview
+        originalPreview.src = img.src;
+        originalInfo.textContent = `${img.width} × ${img.height} pixels`;
+
+        // Get image data from canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        currentImageData = ctx.getImageData(0, 0, img.width, img.height);
+
+        previewContainer.classList.add('active');
+
+        await convertToVtf();
+      };
+
+      img.onerror = () => {
+        showStatus('Failed to load image', 'error');
+      };
+
+      img.src = URL.createObjectURL(file);
+    }
+
+    async function reconvert() {
+      if (currentImageData) {
+        await convertToVtf();
+      }
+    }
+
+    async function convertToVtf() {
+      try {
+        downloadBtn.disabled = true;
+        showStatus('Converting...', 'success');
+
+        const format = formatSelect.value;
+        const resize = resizeSelect.value ? parseInt(resizeSelect.value) : null;
+        const mipmaps = mipmapsCheckbox.checked;
+
+        // Get the image data to convert (resize if needed)
+        let imageDataToConvert = currentImageData;
+        let finalWidth = currentImageData.width;
+        let finalHeight = currentImageData.height;
+
+        if (resize && (resize !== currentImageData.width || resize !== currentImageData.height)) {
+          // Resize using Canvas API
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = currentImageData.width;
+          tempCanvas.height = currentImageData.height;
+          const tempCtx = tempCanvas.getContext('2d');
+          tempCtx.putImageData(currentImageData, 0, 0);
+
+          const resizeCanvas = document.createElement('canvas');
+          resizeCanvas.width = resize;
+          resizeCanvas.height = resize;
+          const resizeCtx = resizeCanvas.getContext('2d');
+          resizeCtx.drawImage(tempCanvas, 0, 0, resize, resize);
+
+          imageDataToConvert = resizeCtx.getImageData(0, 0, resize, resize);
+          finalWidth = resize;
+          finalHeight = resize;
+        }
+
+        // Prepare options
+        const options = {
+          format: VTF_FORMATS[format],
+          generateMips: mipmaps,
+        };
+
+        if (!mipmaps) {
+          options.flags = VTF_FLAGS.NOMIP;
+        }
+
+        // Convert using browser-compatible API
+        const vtfBuffer = convertImageDataToVTF(imageDataToConvert, options);
+
+        currentVtfBuffer = vtfBuffer;
+
+        // Show VTF info
+        const mipmapCount = mipmaps ? Math.floor(Math.log2(Math.max(
+          finalWidth,
+          finalHeight
+        ))) + 1 : 1;
+
+        vtfInfo.innerHTML = `
+          ${finalWidth} × ${finalHeight} pixels<br>
+          Format: ${format}<br>
+          Mipmaps: ${mipmapCount}<br>
+          Size: ${(vtfBuffer.byteLength / 1024).toFixed(1)} KB
+        `;
+
+        // Draw preview of VTF (just show the original since we can't decode VTF in browser easily)
+        const ctx = vtfPreview.getContext('2d');
+        vtfPreview.width = finalWidth > 256 ? 256 : finalWidth;
+        vtfPreview.height = finalHeight > 256 ? 256 : finalHeight;
+
+        // Scale preview
+        const scale = Math.min(256 / finalWidth, 256 / finalHeight, 1);
+        const previewWidth = finalWidth * scale;
+        const previewHeight = finalHeight * scale;
+        vtfPreview.width = previewWidth;
+        vtfPreview.height = previewHeight;
+
+        // Draw scaled version
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = currentImageData.width;
+        tempCanvas.height = currentImageData.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.putImageData(currentImageData, 0, 0);
+
+        ctx.drawImage(tempCanvas, 0, 0, previewWidth, previewHeight);
+
+        downloadBtn.disabled = false;
+        showStatus('✅ Conversion successful!', 'success');
+
+      } catch (error) {
+        console.error('Conversion error:', error);
+        showStatus(`❌ Error: ${error.message}`, 'error');
+        downloadBtn.disabled = true;
+      }
+    }
+
+    downloadBtn.addEventListener('click', () => {
+      if (!currentVtfBuffer) return;
+
+      const blob = new Blob([currentVtfBuffer], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = currentFileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    function showStatus(message, type) {
+      statusEl.textContent = message;
+      statusEl.className = 'status';
+      if (type) {
+        statusEl.classList.add(type);
+      }
+    }
+  </script>
+</body>
+
+</html>

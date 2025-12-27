@@ -1,7 +1,8 @@
 /**
- * PNG to VTF (Valve Texture Format) Converter for Node.js
+ * PNG to VTF (Valve Texture Format) Converter
  *
  * Converts PNG images to VTF format files for use in Source engine games.
+ * Works in both Node.js and browser environments.
  *
  * VTF Specification:
  * https://developer.valvesoftware.com/wiki/VTF_(Valve_Texture_Format)
@@ -10,9 +11,28 @@
  * Version 7.2 adds proper depth support and is widely compatible.
  */
 
-const fs = require('fs');
-const sharp = require('sharp');
-const dxt = require('dxt-js');
+// ============================================================================
+// Environment Detection and Dynamic Imports
+// ============================================================================
+
+export const isBrowser = typeof window !== 'undefined' && typeof window.document !== 'undefined';
+export const isNode = typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
+
+// Node.js-only dependencies (loaded dynamically when needed)
+let fs, sharp;
+async function loadNodeDeps() {
+  if (isNode && !fs) {
+    try {
+      fs = await import('fs');
+      sharp = (await import('sharp')).default;
+    } catch (e) {
+      // sharp may not be available in all Node.js environments
+    }
+  }
+}
+
+// dxt-js works in both Node.js and browser
+import * as dxt from 'dxt-js';
 
 // ============================================================================
 // VTF Format Constants
@@ -25,7 +45,7 @@ const dxt = require('dxt-js');
  * @const
  * @type {Object.<string, number>}
  */
-const VTF_FORMATS = {
+export const VTF_FORMATS = {
   RGBA8888: 0,      // 32-bit RGBA (8 bits per channel)
   ABGR8888: 1,      // 32-bit ABGR (8 bits per channel)
   RGB888: 2,        // 24-bit RGB (8 bits per channel, no alpha)
@@ -61,7 +81,7 @@ const VTF_FORMATS = {
  * @const
  * @type {Object.<string, number>}
  */
-const VTF_FLAGS = {
+export const VTF_FLAGS = {
   POINTSAMPLE: 0x0001,        // Point sampling (no filtering)
   TRILINEAR: 0x0002,          // Trilinear filtering
   CLAMPS: 0x0004,             // Clamp S coordinate
@@ -128,15 +148,56 @@ function writeUint32(buffer, offset, value) {
 
 /**
  * Write a 32-bit float to a buffer (little-endian)
- * @param {Buffer} buffer - The buffer to write to
+ * Works in both Node.js (Buffer) and browser (Uint8Array)
+ * @param {Buffer|Uint8Array} buffer - The buffer to write to
  * @param {number} offset - The byte offset in the buffer
  * @param {number} value - The 32-bit floating point value to write
  * @returns {void}
  */
 function writeFloat32(buffer, offset, value) {
-  const floatBuffer = Buffer.alloc(4);
-  floatBuffer.writeFloatLE(value, 0);
-  floatBuffer.copy(buffer, offset);
+  const floatArray = new Float32Array([value]);
+  const byteArray = new Uint8Array(floatArray.buffer);
+  buffer[offset] = byteArray[0];
+  buffer[offset + 1] = byteArray[1];
+  buffer[offset + 2] = byteArray[2];
+  buffer[offset + 3] = byteArray[3];
+}
+
+/**
+ * Create a buffer that works in both Node.js and browser
+ * @param {number} size - Size in bytes
+ * @returns {Buffer|Uint8Array}
+ */
+export function createBuffer(size) {
+  if (isNode && typeof Buffer !== 'undefined') {
+    return Buffer.alloc(size);
+  }
+
+  return new Uint8Array(size);
+}
+
+/**
+ * Concatenate multiple buffers into one
+ * Works in both Node.js and browser
+ * @param {Array<Buffer|Uint8Array>} buffers - Array of buffers to concatenate
+ * @returns {Buffer|Uint8Array}
+ */
+export function concatBuffers(buffers) {
+  if (isNode && typeof Buffer !== 'undefined') {
+    return Buffer.concat(buffers.map(b => Buffer.from(b)));
+  }
+
+  // Browser: use Uint8Array
+  const totalLength = buffers.reduce((sum, b) => sum + b.length, 0);
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+
+  for (const buffer of buffers) {
+    result.set(buffer, offset);
+    offset += buffer.length;
+  }
+
+  return result;
 }
 
 /**
@@ -144,7 +205,7 @@ function writeFloat32(buffer, offset, value) {
  * @param {number} n - The number to check
  * @returns {boolean} True if n is a power of 2
  */
-function isPowerOf2(n) {
+export function isPowerOf2(n) {
   return n > 0 && (n & (n - 1)) === 0;
 }
 
@@ -153,7 +214,7 @@ function isPowerOf2(n) {
  * @param {number} n - The input number
  * @returns {number} The next power of 2 greater than or equal to n
  */
-function nextPowerOf2(n) {
+export function nextPowerOf2(n) {
   if (n <= 1) return 1;
   n--;
   n |= n >> 1;
@@ -169,7 +230,7 @@ function nextPowerOf2(n) {
  * @param {number} format - VTF format constant from VTF_FORMATS
  * @returns {number} Bytes per pixel (may be fractional for DXT formats)
  */
-function getBytesPerPixel(format) {
+export function getBytesPerPixel(format) {
   switch (format) {
     case VTF_FORMATS.RGBA8888:
     case VTF_FORMATS.ABGR8888:
@@ -222,7 +283,7 @@ function getBytesPerPixel(format) {
  * @returns {Buffer} BGRA8888 pixel data
  */
 function convertRGBA8888ToBGRA8888(data) {
-  const output = Buffer.alloc(data.length);
+  const output = createBuffer(data.length);
 
   for (let i = 0; i < data.length; i += 4) {
     output[i] = data[i + 2];     // B <- R
@@ -240,7 +301,7 @@ function convertRGBA8888ToBGRA8888(data) {
  * @returns {Buffer} ABGR8888 pixel data
  */
 function convertRGBA8888ToABGR8888(data) {
-  const output = Buffer.alloc(data.length);
+  const output = createBuffer(data.length);
 
   for (let i = 0; i < data.length; i += 4) {
     output[i] = data[i + 3];     // A
@@ -258,7 +319,7 @@ function convertRGBA8888ToABGR8888(data) {
  * @returns {Buffer} ARGB8888 pixel data
  */
 function convertRGBA8888ToARGB8888(data) {
-  const output = Buffer.alloc(data.length);
+  const output = createBuffer(data.length);
 
   for (let i = 0; i < data.length; i += 4) {
     output[i] = data[i + 3];     // A
@@ -277,7 +338,7 @@ function convertRGBA8888ToARGB8888(data) {
  * @returns {Buffer} RGB888 pixel data
  */
 function convertRGBA8888ToRGB888(data) {
-  const output = Buffer.alloc((data.length / 4) * 3);
+  const output = createBuffer((data.length / 4) * 3);
 
   for (let i = 0, j = 0; i < data.length; i += 4, j += 3) {
     output[j] = data[i];         // R
@@ -295,7 +356,7 @@ function convertRGBA8888ToRGB888(data) {
  * @returns {Buffer} BGR888 pixel data
  */
 function convertRGBA8888ToBGR888(data) {
-  const output = Buffer.alloc((data.length / 4) * 3);
+  const output = createBuffer((data.length / 4) * 3);
 
   for (let i = 0, j = 0; i < data.length; i += 4, j += 3) {
     output[j] = data[i + 2];     // B
@@ -313,7 +374,7 @@ function convertRGBA8888ToBGR888(data) {
  * @returns {Buffer} I8 (grayscale) pixel data
  */
 function convertRGBA8888ToI8(data) {
-  const output = Buffer.alloc(data.length / 4);
+  const output = createBuffer(data.length / 4);
 
   for (let i = 0, j = 0; i < data.length; i += 4, j++) {
     const luminance = Math.round(
@@ -331,7 +392,7 @@ function convertRGBA8888ToI8(data) {
  * @returns {Buffer} IA88 (grayscale + alpha) pixel data
  */
 function convertRGBA8888ToIA88(data) {
-  const output = Buffer.alloc((data.length / 4) * 2);
+  const output = createBuffer((data.length / 4) * 2);
 
   for (let i = 0, j = 0; i < data.length; i += 4, j += 2) {
     const luminance = Math.round(
@@ -350,7 +411,7 @@ function convertRGBA8888ToIA88(data) {
  * @returns {Buffer} A8 (alpha only) pixel data
  */
 function convertRGBA8888ToA8(data) {
-  const output = Buffer.alloc(data.length / 4);
+  const output = createBuffer(data.length / 4);
 
   for (let i = 0, j = 0; i < data.length; i += 4, j++) {
     output[j] = data[i + 3]; // A
@@ -366,7 +427,7 @@ function convertRGBA8888ToA8(data) {
  * @returns {Buffer} RGB565 pixel data
  */
 function convertRGBA8888ToRGB565(data) {
-  const output = Buffer.alloc((data.length / 4) * 2);
+  const output = createBuffer((data.length / 4) * 2);
 
   for (let i = 0, j = 0; i < data.length; i += 4, j += 2) {
     const r = data[i] >> 3;       // 5 bits
@@ -387,7 +448,7 @@ function convertRGBA8888ToRGB565(data) {
  * @returns {Buffer} BGR565 pixel data
  */
 function convertRGBA8888ToBGR565(data) {
-  const output = Buffer.alloc((data.length / 4) * 2);
+  const output = createBuffer((data.length / 4) * 2);
 
   for (let i = 0, j = 0; i < data.length; i += 4, j += 2) {
     const r = data[i] >> 3;       // 5 bits
@@ -409,7 +470,7 @@ function convertRGBA8888ToBGR565(data) {
  * @returns {Buffer} BGRA5551 pixel data
  */
 function convertRGBA8888ToBGRA5551(data) {
-  const output = Buffer.alloc((data.length / 4) * 2);
+  const output = createBuffer((data.length / 4) * 2);
 
   for (let i = 0, j = 0; i < data.length; i += 4, j += 2) {
     const r = data[i] >> 3;       // 5 bits
@@ -431,7 +492,7 @@ function convertRGBA8888ToBGRA5551(data) {
  * @returns {Buffer} BGRA4444 pixel data
  */
 function convertRGBA8888ToBGRA4444(data) {
-  const output = Buffer.alloc((data.length / 4) * 2);
+  const output = createBuffer((data.length / 4) * 2);
 
   for (let i = 0, j = 0; i < data.length; i += 4, j += 2) {
     const r = data[i] >> 4;       // 4 bits
@@ -453,7 +514,7 @@ function convertRGBA8888ToBGRA4444(data) {
  * @returns {Buffer} UV88 pixel data
  */
 function convertRGBA8888ToUV88(data) {
-  const output = Buffer.alloc((data.length / 4) * 2);
+  const output = createBuffer((data.length / 4) * 2);
 
   for (let i = 0, j = 0; i < data.length; i += 4, j += 2) {
     output[j] = data[i];         // U <- R
@@ -475,7 +536,7 @@ function convertRGBA8888ToUV88(data) {
  * @param {number} format - VTF DXT format (DXT1, DXT3, or DXT5 from VTF_FORMATS)
  * @returns {number} Size in bytes
  */
-function calculateDXTSize(width, height, format) {
+export function calculateDXTSize(width, height, format) {
   // Round up to nearest multiple of 4
   const blocksX = Math.max(1, Math.ceil(width / 4));
   const blocksY = Math.max(1, Math.ceil(height / 4));
@@ -498,7 +559,7 @@ function calculateDXTSize(width, height, format) {
  * @returns {Buffer} DXT compressed data
  * @throws {Error} If format is not a supported DXT format
  */
-function compressToDXT(rgbaData, width, height, format) {
+export function compressToDXT(rgbaData, width, height, format) {
   // Determine dxt-js flags based on format
   let dxtFlags;
   switch (format) {
@@ -522,7 +583,8 @@ function compressToDXT(rgbaData, width, height, format) {
   // Compress using dxt-js
   const compressed = dxt.compress(inputArray, width, height, dxtFlags);
 
-  return Buffer.from(compressed);
+  // Return as Uint8Array (works in both Node.js and browser)
+  return new Uint8Array(compressed);
 }
 
 // ============================================================================
@@ -571,7 +633,7 @@ function compressToDXT(rgbaData, width, height, format) {
  * @param {number} [options.depth=1] - Texture depth (for volumetric textures)
  * @returns {Buffer} VTF header (80 bytes)
  */
-function createVTFHeader(width, height, format, options = {}) {
+export function createVTFHeader(width, height, format, options = {}) {
   const {
     mipmaps = false,
     flags = null,
@@ -583,7 +645,7 @@ function createVTFHeader(width, height, format, options = {}) {
   } = options;
 
   // VTF 7.2 header size is 80 bytes
-  const header = Buffer.alloc(80);
+  const header = createBuffer(80);
 
   // Signature: "VTF\0" (4 bytes)
   header[0] = 0x56;  // 'V'
@@ -689,7 +751,7 @@ function createVTFHeader(width, height, format, options = {}) {
  * @param {number} height - Image height
  * @returns {number} Total mipmap levels including the base image
  */
-function calculateMipmapCount(width, height) {
+export function calculateMipmapCount(width, height) {
   let count = 1;
   let w = width;
   let h = height;
@@ -715,7 +777,7 @@ function calculateMipmapCount(width, height) {
  * @param {number} height - Image height
  * @returns {Buffer[]} Array of mipmap buffers, smallest first
  */
-function generateMipmaps(rgbaData, width, height) {
+export function generateMipmaps(rgbaData, width, height) {
   const mipmaps = [];
   let currentData = rgbaData;
   let currentW = width;
@@ -728,7 +790,7 @@ function generateMipmaps(rgbaData, width, height) {
   while (currentW > 1 || currentH > 1) {
     const newW = Math.max(1, Math.floor(currentW / 2));
     const newH = Math.max(1, Math.floor(currentH / 2));
-    const newData = Buffer.alloc(newW * newH * 4);
+    const newData = createBuffer(newW * newH * 4);
 
     // Simple box filter downsampling
     for (let y = 0; y < newH; y++) {
@@ -783,7 +845,7 @@ function convertMipmapsToFormat(mipmaps, format) {
  * @returns {Buffer} Converted pixel data in the target format
  * @throws {Error} If format is a DXT format (use compressToDXT instead)
  */
-function convertToFormat(rgbaData, format) {
+export function convertToFormat(rgbaData, format) {
   switch (format) {
     case VTF_FORMATS.RGBA8888:
       return rgbaData;
@@ -866,7 +928,7 @@ function calculateReflectivity(rgbaData) {
  * @param {number} [generateMipsOrOptions.bumpmapScale=1.0] - Bumpmap scale
  * @returns {Buffer} VTF file data
  */
-function convertRGBAToVTF(rgbaData, width, height, format = VTF_FORMATS.RGBA8888, generateMipsOrOptions = true) {
+export function convertRGBAToVTF(rgbaData, width, height, format = VTF_FORMATS.RGBA8888, generateMipsOrOptions = true) {
   // Handle legacy boolean parameter or new options object
   let options = {};
   if (typeof generateMipsOrOptions === 'boolean') {
@@ -944,11 +1006,11 @@ function convertRGBAToVTF(rgbaData, width, height, format = VTF_FORMATS.RGBA8888
     bumpmapScale
   });
 
-  return Buffer.concat([header, ...pixelDataBuffers]);
+  return concatBuffers([header, ...pixelDataBuffers]);
 }
 
 /**
- * Convert a PNG file to VTF format
+ * Convert a PNG file to VTF format (Node.js only)
  * @param {string} inputPath - Path to input PNG file
  * @param {string} outputPath - Path to output VTF file
  * @param {Object} [options] - Conversion options
@@ -959,8 +1021,18 @@ function convertRGBAToVTF(rgbaData, width, height, format = VTF_FORMATS.RGBA8888
  * @param {number} [options.flags] - VTF flags (auto-detected if not specified)
  * @param {boolean} [options.clampToPowerOf2=false] - Resize to nearest power of 2
  * @returns {Promise<{width: number, height: number, format: number}>} Conversion result info
+ * @throws {Error} If sharp is not available (browser environment)
  */
-async function convertPNGToVTF(inputPath, outputPath, options = {}) {
+export async function convertPNGToVTF(inputPath, outputPath, options = {}) {
+  await loadNodeDeps();
+
+  if (!sharp) {
+    throw new Error('convertPNGToVTF requires sharp, which is only available in Node.js. Use convertImageDataToVTF or CanvasToVTF in the browser.');
+  }
+  if (!fs) {
+    throw new Error('convertPNGToVTF requires fs, which is only available in Node.js.');
+  }
+
   const format = options.format !== undefined ? options.format : VTF_FORMATS.RGBA8888;
   const generateMips = options.generateMips !== undefined ? options.generateMips : true;
   const clampToPowerOf2 = options.clampToPowerOf2 || false;
@@ -1006,7 +1078,7 @@ async function convertPNGToVTF(inputPath, outputPath, options = {}) {
 }
 
 /**
- * Convert a PNG buffer to VTF format
+ * Convert a PNG buffer to VTF format (Node.js only)
  * @param {Buffer} pngBuffer - PNG image data as a buffer
  * @param {Object} [options] - Conversion options
  * @param {number} [options.format=VTF_FORMATS.RGBA8888] - VTF format from VTF_FORMATS
@@ -1016,8 +1088,15 @@ async function convertPNGToVTF(inputPath, outputPath, options = {}) {
  * @param {number} [options.flags] - VTF flags (auto-detected if not specified)
  * @param {boolean} [options.clampToPowerOf2=false] - Resize to nearest power of 2
  * @returns {Promise<Buffer>} VTF file buffer
+ * @throws {Error} If sharp is not available (browser environment)
  */
-async function convertPNGBufferToVTF(pngBuffer, options = {}) {
+export async function convertPNGBufferToVTF(pngBuffer, options = {}) {
+  await loadNodeDeps();
+
+  if (!sharp) {
+    throw new Error('convertPNGBufferToVTF requires sharp, which is only available in Node.js. Use convertImageDataToVTF or CanvasToVTF in the browser.');
+  }
+
   const format = options.format !== undefined ? options.format : VTF_FORMATS.RGBA8888;
   const generateMips = options.generateMips !== undefined ? options.generateMips : true;
   const clampToPowerOf2 = options.clampToPowerOf2 || false;
@@ -1058,25 +1137,201 @@ async function convertPNGBufferToVTF(pngBuffer, options = {}) {
 }
 
 // ============================================================================
-// Exports
+// Browser-Compatible Functions
 // ============================================================================
 
-module.exports = {
+/**
+ * Convert ImageData (from Canvas) to VTF format
+ * Works in both Node.js and browser environments
+ * @param {ImageData|{data: Uint8ClampedArray, width: number, height: number}} imageData - ImageData object from canvas
+ * @param {Object} [options] - Conversion options
+ * @param {number} [options.format=VTF_FORMATS.RGBA8888] - VTF format from VTF_FORMATS
+ * @param {boolean} [options.generateMips=true] - Generate mipmaps
+ * @param {number} [options.flags] - VTF flags (auto-detected if not specified)
+ * @returns {Uint8Array} VTF file data
+ */
+export function convertImageDataToVTF(imageData, options = {}) {
+  const format = options.format !== undefined ? options.format : VTF_FORMATS.RGBA8888;
+  const generateMips = options.generateMips !== undefined ? options.generateMips : true;
+
+  // Convert ImageData to Uint8Array
+  const rgbaData = new Uint8Array(imageData.data);
+  const width = imageData.width;
+  const height = imageData.height;
+
+  return convertRGBAToVTF(rgbaData, width, height, format, {
+    generateMips,
+    flags: options.flags,
+    calculateReflectivityValue: true
+  });
+}
+
+/**
+ * Canvas to VTF converter class (Browser-friendly)
+ * Converts HTML5 Canvas images to Valve Texture Format (VTF) files
+ */
+export class CanvasToVTF {
+  /**
+   * Create a VTF converter
+   * @param {Object} [options] - Conversion options
+   * @param {number} [options.format=VTF_FORMATS.RGBA8888] - VTF format (use VTF_FORMATS constants)
+   * @param {boolean} [options.mipmaps=true] - Generate mipmaps (default: true for better scaling)
+   * @param {number} [options.flags] - VTF flags (auto-detected if not specified)
+   */
+  constructor(options = {}) {
+    this.format = options.format || VTF_FORMATS.RGBA8888;
+    this.mipmaps = options.mipmaps !== undefined ? options.mipmaps : true;
+    this.flags = options.flags;
+  }
+
+  /**
+   * Convert canvas to VTF format
+   * @param {HTMLCanvasElement} canvas - Source canvas
+   * @returns {Uint8Array} VTF file data
+   */
+  convertCanvas(canvas) {
+    const width = canvas.width;
+    const height = canvas.height;
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, width, height);
+
+    return this.convertImageData(imageData);
+  }
+
+  /**
+   * Convert ImageData to VTF format
+   * @param {ImageData} imageData - Source image data
+   * @returns {Uint8Array} VTF file data
+   */
+  convertImageData(imageData) {
+    return convertImageDataToVTF(imageData, {
+      format: this.format,
+      generateMips: this.mipmaps,
+      flags: this.flags
+    });
+  }
+
+  /**
+   * Convert canvas to VTF and trigger download (browser only)
+   * @param {HTMLCanvasElement} canvas - Source canvas element
+   * @param {string} [filename='texture'] - Output filename without extension
+   */
+  downloadFromCanvas(canvas, filename = 'texture') {
+    const vtfData = this.convertCanvas(canvas);
+    downloadVTF(vtfData, filename);
+  }
+}
+
+/**
+ * Download VTF data as a file (browser only)
+ * @param {Uint8Array} vtfData - VTF file data
+ * @param {string} [filename='texture'] - Filename without extension
+ */
+export function downloadVTF(vtfData, filename = 'texture') {
+  if (!isBrowser) {
+    throw new Error('downloadVTF is only available in browser environments');
+  }
+
+  const blob = new Blob([vtfData], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+
+  a.href = url;
+  a.download = `${filename}.vtf`;
+  document.body.appendChild(a);
+  a.click();
+
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 0);
+}
+
+/**
+ * Quick convert and download canvas to VTF (browser only)
+ * Convenience function for simple conversions without creating a converter instance
+ * @param {HTMLCanvasElement} canvas - Source canvas element
+ * @param {string} [filename='texture'] - Output filename without extension
+ * @param {number} [format=VTF_FORMATS.RGBA8888] - VTF format constant from VTF_FORMATS
+ * @param {Object} [options] - Additional options
+ * @param {boolean} [options.mipmaps=true] - Generate mipmaps
+ */
+export function canvasToVTF(canvas, filename = 'texture', format = VTF_FORMATS.RGBA8888, options = {}) {
+  const converter = new CanvasToVTF({
+    format,
+    mipmaps: options.mipmaps !== undefined ? options.mipmaps : true
+  });
+  converter.downloadFromCanvas(canvas, filename);
+}
+
+/**
+ * Resize an image using Canvas API (browser only)
+ * @param {HTMLImageElement|HTMLCanvasElement|ImageBitmap} source - Source image
+ * @param {number} width - Target width
+ * @param {number} height - Target height
+ * @returns {ImageData} Resized image data
+ */
+export function resizeImageBrowser(source, width, height) {
+  if (!isBrowser) {
+    throw new Error('resizeImageBrowser is only available in browser environments');
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(source, 0, 0, width, height);
+  return ctx.getImageData(0, 0, width, height);
+}
+
+// ============================================================================
+// Default Export (for convenience)
+// ============================================================================
+
+const PNGToVTF = {
+  // Constants
   VTF_FORMATS,
   VTF_FLAGS,
+
+  // Core conversion functions (work everywhere)
+  convertRGBAToVTF,
+  convertImageDataToVTF,
+  createVTFHeader,
+
+  // Node.js-specific functions (require sharp)
   convertPNGToVTF,
   convertPNGBufferToVTF,
-  convertRGBAToVTF,
-  createVTFHeader,
+
+  // Browser-friendly class and functions
+  CanvasToVTF,
+  canvasToVTF,
+  downloadVTF,
+  resizeImageBrowser,
+
   // Utility functions
   isPowerOf2,
   nextPowerOf2,
   getBytesPerPixel,
   calculateMipmapCount,
+  createBuffer,
+  concatBuffers,
+
   // Format conversion utilities (for advanced users)
   convertToFormat,
   generateMipmaps,
+
   // DXT compression utilities
   compressToDXT,
-  calculateDXTSize
+  calculateDXTSize,
+
+  // Environment detection
+  isBrowser,
+  isNode
 };
+
+export default PNGToVTF;
+
+// Browser global (for script tag usage)
+if (isBrowser) {
+  window.PNGToVTF = PNGToVTF;
+}

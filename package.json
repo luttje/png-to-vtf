@@ -1,12 +1,19 @@
 {
   "name": "png-to-vtf",
-  "version": "0.1.0",
-  "description": "Convert PNG images to VTF (Valve Texture Format) for Source engine games like Garry's Mod, Counter-Strike, Team Fortress 2, and Half-Life 2",
+  "version": "0.2.0",
+  "description": "Convert PNG images to VTF (Valve Texture Format) for Source engine games like Garry's Mod, Counter-Strike, Team Fortress 2, and Half-Life 2. Works in both Node.js and browser environments.",
+  "type": "module",
   "main": "index.js",
+  "browser": {
+    "fs": false,
+    "sharp": false
+  },
   "types": "index.d.ts",
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build": "node scripts/build.mjs",
+    "dev": "vite"
   },
   "keywords": [
     "vtf",
@@ -23,7 +30,9 @@
     "png",
     "image",
     "converter",
-    "texture-format"
+    "texture-format",
+    "browser",
+    "canvas"
   ],
   "author": "",
   "license": "MIT",
@@ -33,17 +42,21 @@
   },
   "homepage": "",
   "dependencies": {
-    "dxt-js": "^0.0.3",
+    "dxt-js": "^0.0.3"
+  },
+  "optionalDependencies": {
     "sharp": "^0.33.0"
   },
   "files": [
     "index.js",
     "index.d.ts",
+    "dist/",
     "README.md",
     "LICENSE"
   ],
   "devDependencies": {
     "@types/node": "^25.0.3",
+    "esbuild": "^0.27.2",
     "vitest": "^4.0.16"
   }
 }

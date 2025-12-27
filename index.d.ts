@@ -2,8 +2,15 @@
  * PNG to VTF (Valve Texture Format) Converter
  *
  * Converts PNG images to VTF format files for use in Source engine games.
+ * Works in both Node.js and browser environments.
  * Implements VTF version 7.2 with 80-byte headers.
  */
+
+// Environment detection
+/** Whether the code is running in a browser environment */
+export const isBrowser: boolean;
+/** Whether the code is running in a Node.js environment */
+export const isNode: boolean;
 
 /**
  * VTF Image Formats
@@ -156,11 +163,12 @@ export interface RGBAToVTFOptions {
 }
 
 /**
- * Convert a PNG file to VTF format
+ * Convert a PNG file to VTF format (Node.js only - requires sharp)
  * @param inputPath - Path to input PNG file
  * @param outputPath - Path to output VTF file
  * @param options - Conversion options
  * @returns Conversion result info
+ * @throws Error if sharp is not available (browser environment)
  */
 export function convertPNGToVTF(
   inputPath: string,
@@ -169,10 +177,11 @@ export function convertPNGToVTF(
 ): Promise<ConversionResult>;
 
 /**
- * Convert a PNG buffer to VTF format
+ * Convert a PNG buffer to VTF format (Node.js only - requires sharp)
  * @param pngBuffer - PNG image buffer
  * @param options - Conversion options
  * @returns VTF file buffer
+ * @throws Error if sharp is not available (browser environment)
  */
 export function convertPNGBufferToVTF(
   pngBuffer: Buffer,
@@ -181,6 +190,7 @@ export function convertPNGBufferToVTF(
 
 /**
  * Convert raw RGBA pixel data to VTF format
+ * Works in both Node.js and browser environments
  * @param rgbaData - Raw RGBA pixel data
  * @param width - Image width
  * @param height - Image height
@@ -189,12 +199,12 @@ export function convertPNGBufferToVTF(
  * @returns VTF file data
  */
 export function convertRGBAToVTF(
-  rgbaData: Buffer,
+  rgbaData: Buffer | Uint8Array,
   width: number,
   height: number,
   format?: VTFFormat,
   generateMipsOrOptions?: boolean | RGBAToVTFOptions
-): Buffer;
+): Buffer | Uint8Array;
 
 /**
  * Create VTF header according to VTF 7.2 specification
@@ -269,3 +279,140 @@ export function compressToDXT(
  * @returns Size in bytes
  */
 export function calculateDXTSize(width: number, height: number, format: VTFFormat): number;
+
+// ============================================================================
+// Browser-Compatible Functions and Classes
+// ============================================================================
+
+/** Options for ImageData to VTF conversion */
+export interface ImageDataConversionOptions {
+  /** VTF format (default: RGBA8888) */
+  format?: VTFFormat;
+  /** Generate mipmaps (default: true) */
+  generateMips?: boolean;
+  /** VTF flags (auto-detected if not specified) */
+  flags?: number;
+}
+
+/** Options for CanvasToVTF class */
+export interface CanvasToVTFOptions {
+  /** VTF format (default: RGBA8888) */
+  format?: VTFFormat;
+  /** Generate mipmaps (default: true) */
+  mipmaps?: boolean;
+  /** VTF flags (auto-detected if not specified) */
+  flags?: number;
+}
+
+/**
+ * Convert ImageData (from Canvas) to VTF format
+ * Works in both Node.js and browser environments
+ * @param imageData - ImageData object from canvas getImageData()
+ * @param options - Conversion options
+ * @returns VTF file data
+ */
+export function convertImageDataToVTF(
+  imageData: ImageData | { data: Uint8ClampedArray; width: number; height: number },
+  options?: ImageDataConversionOptions
+): Uint8Array;
+
+/**
+ * Canvas to VTF converter class (Browser-friendly)
+ * Converts HTML5 Canvas images to Valve Texture Format (VTF) files
+ */
+export class CanvasToVTF {
+  /**
+   * Create a VTF converter
+   * @param options - Conversion options
+   */
+  constructor(options?: CanvasToVTFOptions);
+
+  /** VTF format to use */
+  format: VTFFormat;
+  /** Whether to generate mipmaps */
+  mipmaps: boolean;
+  /** VTF flags */
+  flags?: number;
+
+  /**
+   * Convert canvas to VTF format
+   * @param canvas - Source canvas
+   * @returns VTF file data
+   */
+  convertCanvas(canvas: HTMLCanvasElement): Uint8Array;
+
+  /**
+   * Convert ImageData to VTF format
+   * @param imageData - Source image data
+   * @returns VTF file data
+   */
+  convertImageData(imageData: ImageData): Uint8Array;
+
+  /**
+   * Convert canvas to VTF and trigger download (browser only)
+   * @param canvas - Source canvas element
+   * @param filename - Output filename without extension
+   */
+  downloadFromCanvas(canvas: HTMLCanvasElement, filename?: string): void;
+}
+
+/**
+ * Download VTF data as a file (browser only)
+ * @param vtfData - VTF file data
+ * @param filename - Filename without extension
+ */
+export function downloadVTF(vtfData: Uint8Array, filename?: string): void;
+
+/**
+ * Quick convert and download canvas to VTF (browser only)
+ * Convenience function for simple conversions
+ * @param canvas - Source canvas element
+ * @param filename - Output filename without extension
+ * @param format - VTF format constant from VTF_FORMATS
+ * @param options - Additional options
+ */
+export function canvasToVTF(
+  canvas: HTMLCanvasElement,
+  filename?: string,
+  format?: VTFFormat,
+  options?: { mipmaps?: boolean }
+): void;
+
+/**
+ * Resize an image using Canvas API (browser only)
+ * @param source - Source image element
+ * @param width - Target width
+ * @param height - Target height
+ * @returns Resized image data
+ */
+export function resizeImageBrowser(
+  source: HTMLImageElement | HTMLCanvasElement | ImageBitmap,
+  width: number,
+  height: number
+): ImageData;
+
+// ============================================================================
+// Cross-Platform Utility Functions
+// ============================================================================
+
+/**
+ * Create a buffer that works in both Node.js and browser
+ * @param size - Size in bytes
+ * @returns Buffer (Node.js) or Uint8Array (browser)
+ */
+export function createBuffer(size: number): Buffer | Uint8Array;
+
+/**
+ * Concatenate multiple buffers into one
+ * Works in both Node.js and browser
+ * @param buffers - Array of buffers to concatenate
+ * @returns Concatenated buffer
+ */
+export function concatBuffers(buffers: Array<Buffer | Uint8Array>): Buffer | Uint8Array;
+
+// Browser global declaration
+declare global {
+  interface Window {
+    PNGToVTF: typeof import('./index');
+  }
+}
