@@ -38,7 +38,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/luttje/png-to-vtf"
+    "url": "git+https://github.com/luttje/png-to-vtf.git"
   },
   "homepage": "",
   "dependencies": {
