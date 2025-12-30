@@ -1033,7 +1033,7 @@ export async function convertPNGToVTF(inputPath, outputPath, options = {}) {
     throw new Error('convertPNGToVTF requires fs, which is only available in Node.js.');
   }
 
-  const format = options.format !== undefined ? options.format : VTF_FORMATS.RGBA8888;
+  const format = options.format !== undefined ? options.format : VTF_FORMATS.DXT5;
   const generateMips = options.generateMips !== undefined ? options.generateMips : true;
   const clampToPowerOf2 = options.clampToPowerOf2 || false;
 
@@ -1097,7 +1097,7 @@ export async function convertPNGBufferToVTF(pngBuffer, options = {}) {
     throw new Error('convertPNGBufferToVTF requires sharp, which is only available in Node.js. Use convertImageDataToVTF or CanvasToVTF in the browser.');
   }
 
-  const format = options.format !== undefined ? options.format : VTF_FORMATS.RGBA8888;
+  const format = options.format !== undefined ? options.format : VTF_FORMATS.DXT5;
   const generateMips = options.generateMips !== undefined ? options.generateMips : true;
   const clampToPowerOf2 = options.clampToPowerOf2 || false;
 
@@ -1151,7 +1151,7 @@ export async function convertPNGBufferToVTF(pngBuffer, options = {}) {
  * @returns {Uint8Array} VTF file data
  */
 export function convertImageDataToVTF(imageData, options = {}) {
-  const format = options.format !== undefined ? options.format : VTF_FORMATS.RGBA8888;
+  const format = options.format !== undefined ? options.format : VTF_FORMATS.DXT5;
   const generateMips = options.generateMips !== undefined ? options.generateMips : true;
 
   // Convert ImageData to Uint8Array

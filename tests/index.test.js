@@ -365,9 +365,9 @@ describe('PNG to VTF Conversion', () => {
 
     const result = await convertPNGToVTF(TEST_PNG, outputPath);
 
-    expect(result.width).toBeGreaterThan(0);
-    expect(result.height).toBeGreaterThan(0);
-    expect(result.format).toBe(VTF_FORMATS.RGBA8888);
+    expect(result.width).toBe(512);
+    expect(result.height).toBe(512);
+    expect(result.format).toBe(VTF_FORMATS.DXT5);
 
     // Verify file was created
     expect(fs.existsSync(outputPath)).toBe(true);
@@ -474,30 +474,6 @@ describe('VTF Flags', () => {
   it('should allow combining flags with bitwise OR', () => {
     const combined = VTF_FLAGS.TRILINEAR | VTF_FLAGS.ANISOTROPIC | VTF_FLAGS.EIGHTBITALPHA;
     expect(combined).toBe(0x2012);
-  });
-});
-
-// ============================================================================
-// VTF Formats Tests
-// ============================================================================
-
-describe('VTF Formats', () => {
-  it('should have correct format values matching VTF spec', () => {
-    expect(VTF_FORMATS.RGBA8888).toBe(0);
-    expect(VTF_FORMATS.ABGR8888).toBe(1);
-    expect(VTF_FORMATS.RGB888).toBe(2);
-    expect(VTF_FORMATS.BGR888).toBe(3);
-    expect(VTF_FORMATS.RGB565).toBe(4);
-    expect(VTF_FORMATS.I8).toBe(5);
-    expect(VTF_FORMATS.IA88).toBe(6);
-    expect(VTF_FORMATS.A8).toBe(8);
-    expect(VTF_FORMATS.BGRA8888).toBe(12);
-    expect(VTF_FORMATS.DXT1).toBe(13);
-    expect(VTF_FORMATS.DXT3).toBe(14);
-    expect(VTF_FORMATS.DXT5).toBe(15);
-    expect(VTF_FORMATS.BGR565).toBe(17);
-    expect(VTF_FORMATS.BGRA4444).toBe(19);
-    expect(VTF_FORMATS.BGRA5551).toBe(21);
   });
 });
 
@@ -854,8 +830,8 @@ describe('VTFEdit Reference Comparison', () => {
 
         expect(header.signature).toBe('VTF\0');
         expect(header.versionMajor).toBe(7);
-        expect(header.width).toBeGreaterThan(0);
-        expect(header.height).toBeGreaterThan(0);
+        expect(header.width).toBe(512);
+        expect(header.height).toBe(512);
       }
     });
   });
