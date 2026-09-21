@@ -45,7 +45,7 @@
     "dxt-js": "^0.0.3"
   },
   "optionalDependencies": {
-    "sharp": "^0.33.0"
+    "sharp": "^0.35.4"
   },
   "files": [
     "index.js",
@@ -56,7 +56,7 @@
   ],
   "devDependencies": {
     "@types/node": "^25.0.3",
-    "esbuild": "^0.27.2",
+    "esbuild": "^0.28.2",
     "vitest": "^4.0.16"
   }
 }
