@@ -42,7 +42,7 @@
   },
   "homepage": "",
   "dependencies": {
-    "dxt-js": "^0.0.3"
+    "dxt-js": "0.0.3"
   },
   "optionalDependencies": {
     "sharp": "^0.35.5"
