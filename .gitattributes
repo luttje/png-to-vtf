@@ -1,0 +1,3 @@
+# Check text files out with LF on every platform (matches .editorconfig), so
+# the browser bundles build to the same bytes on Windows and in CI.
+* text=auto eol=lf
