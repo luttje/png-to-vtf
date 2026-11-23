@@ -7452,6 +7452,9 @@ var PNGToVTF = (() => {
   var index_exports = {};
   __export(index_exports, {
     CanvasToVTF: () => CanvasToVTF,
+    DEFAULT_MAX_PIXELS: () => DEFAULT_MAX_PIXELS,
+    MAX_VTF_DIMENSION: () => MAX_VTF_DIMENSION,
+    SUPPORTED_INPUT_FORMATS: () => SUPPORTED_INPUT_FORMATS,
     VTF_FLAGS: () => VTF_FLAGS,
     VTF_FORMATS: () => VTF_FORMATS,
     calculateDXTSize: () => calculateDXTSize,
@@ -7662,6 +7665,24 @@ var PNGToVTF = (() => {
     n |= n >> 16;
     return n + 1;
   }
+  var MAX_VTF_DIMENSION = 65535;
+  function assertValidDimensions(width, height) {
+    for (const [name, value] of [["width", width], ["height", height]]) {
+      if (!Number.isInteger(value) || value < 1 || value > MAX_VTF_DIMENSION) {
+        throw new RangeError(`Invalid ${name} ${value}: must be an integer between 1 and ${MAX_VTF_DIMENSION}.`);
+      }
+    }
+  }
+  function assertValidRGBAInput(rgbaData, width, height) {
+    assertValidDimensions(width, height);
+    if (rgbaData == null || typeof rgbaData.length !== "number") {
+      throw new TypeError("rgbaData must be a Buffer or typed array of RGBA pixel data.");
+    }
+    const expectedLength = width * height * 4;
+    if (rgbaData.length !== expectedLength) {
+      throw new RangeError(`rgbaData length ${rgbaData.length} does not match ${width}x${height} RGBA (expected ${expectedLength} bytes).`);
+    }
+  }
   function getBytesPerPixel(format) {
     switch (format) {
       case VTF_FORMATS.RGBA8888:
@@ -7846,6 +7867,7 @@ var PNGToVTF = (() => {
     }
   }
   function compressToDXT(rgbaData, width, height, format) {
+    assertValidRGBAInput(rgbaData, width, height);
     let dxtFlags;
     switch (format) {
       case VTF_FORMATS.DXT1:
@@ -7866,6 +7888,7 @@ var PNGToVTF = (() => {
     return new Uint8Array(compressed);
   }
   function createVTFHeader(width, height, format, options = {}) {
+    assertValidDimensions(width, height);
     const {
       mipmaps = false,
       flags: flags2 = null,
@@ -8038,6 +8061,7 @@ var PNGToVTF = (() => {
     ];
   }
   function convertRGBAToVTF(rgbaData, width, height, format = VTF_FORMATS.RGBA8888, generateMipsOrOptions = true) {
+    assertValidRGBAInput(rgbaData, width, height);
     let options = {};
     if (typeof generateMipsOrOptions === "boolean") {
       options.generateMips = generateMipsOrOptions;
@@ -8104,16 +8128,69 @@ var PNGToVTF = (() => {
     if (!fs) {
       throw new Error("convertPNGToVTF requires fs, which is only available in Node.js.");
     }
+    const { vtfData, width, height, format } = await convertEncodedImageToVTF(fs.readFileSync(inputPath), options);
+    fs.writeFileSync(outputPath, vtfData);
+    return { width, height, format };
+  }
+  async function convertPNGBufferToVTF(pngBuffer, options = {}) {
+    await loadNodeDeps();
+    if (!sharp) {
+      throw new Error("convertPNGBufferToVTF requires sharp, which is only available in Node.js. Use convertImageDataToVTF or CanvasToVTF in the browser.");
+    }
+    const { vtfData } = await convertEncodedImageToVTF(pngBuffer, options);
+    return vtfData;
+  }
+  var SUPPORTED_INPUT_FORMATS = Object.freeze(["png", "jpeg", "webp", "gif", "avif"]);
+  var DEFAULT_MAX_PIXELS = 8192 * 8192;
+  function detectImageFormat(bytes) {
+    const startsWith = (signature, offset = 0) => bytes.length >= offset + signature.length && signature.every((byte, i2) => bytes[offset + i2] === byte);
+    const ascii = (text) => Array.from(text, (char) => char.charCodeAt(0));
+    if (startsWith([137, 80, 78, 71, 13, 10, 26, 10])) return "png";
+    if (startsWith([255, 216, 255])) return "jpeg";
+    if (startsWith(ascii("RIFF")) && startsWith(ascii("WEBP"), 8)) return "webp";
+    if (startsWith(ascii("GIF87a")) || startsWith(ascii("GIF89a"))) return "gif";
+    if (startsWith(ascii("ftyp"), 4) && (startsWith(ascii("avif"), 8) || startsWith(ascii("avis"), 8))) return "avif";
+    return null;
+  }
+  async function convertEncodedImageToVTF(input, options) {
     const format = options.format !== void 0 ? options.format : VTF_FORMATS.DXT5;
     const generateMips = options.generateMips !== void 0 ? options.generateMips : true;
     const clampToPowerOf2 = options.clampToPowerOf2 || false;
-    let image = sharp(inputPath);
+    const allowedInputFormats = options.allowedInputFormats !== void 0 ? options.allowedInputFormats : ["png"];
+    const maxPixels = options.maxPixels !== void 0 ? options.maxPixels : DEFAULT_MAX_PIXELS;
+    if (!Array.isArray(allowedInputFormats) || allowedInputFormats.some((f) => !SUPPORTED_INPUT_FORMATS.includes(f))) {
+      throw new TypeError(`allowedInputFormats must be an array containing only: ${SUPPORTED_INPUT_FORMATS.join(", ")}.`);
+    }
+    if (!Number.isInteger(maxPixels) || maxPixels < 1) {
+      throw new TypeError("maxPixels must be a positive integer.");
+    }
+    if (input instanceof ArrayBuffer) {
+      input = new Uint8Array(input);
+    }
+    if (!(input instanceof Uint8Array)) {
+      throw new TypeError("Image data must be a Buffer, Uint8Array or ArrayBuffer.");
+    }
+    const detectedFormat = detectImageFormat(input);
+    if (!detectedFormat || !allowedInputFormats.includes(detectedFormat)) {
+      throw new Error(`Unsupported input image format (${detectedFormat || "unrecognised"}). Allowed: ${allowedInputFormats.join(", ")}.`);
+    }
+    let image = sharp(input, { limitInputPixels: maxPixels });
     const metadata = await image.metadata();
+    if (metadata.format !== detectedFormat) {
+      throw new Error(`Unsupported input image format (${metadata.format}). Allowed: ${allowedInputFormats.join(", ")}.`);
+    }
+    if (metadata.width * metadata.height > maxPixels) {
+      throw new RangeError(`Source image ${metadata.width}x${metadata.height} exceeds the limit of ${maxPixels} pixels (see the maxPixels option).`);
+    }
     let width = options.width || metadata.width;
     let height = options.height || metadata.height;
     if (clampToPowerOf2 && (!isPowerOf2(width) || !isPowerOf2(height))) {
       width = nextPowerOf2(width);
       height = nextPowerOf2(height);
+    }
+    assertValidDimensions(width, height);
+    if (width * height > maxPixels) {
+      throw new RangeError(`Output size ${width}x${height} exceeds the limit of ${maxPixels} pixels (see the maxPixels option).`);
     }
     if (width !== metadata.width || height !== metadata.height) {
       image = image.resize(width, height, { fit: "fill" });
@@ -8126,36 +8203,7 @@ var PNGToVTF = (() => {
       flags: options.flags,
       calculateReflectivityValue: true
     });
-    fs.writeFileSync(outputPath, vtfData);
-    return { width, height, format };
-  }
-  async function convertPNGBufferToVTF(pngBuffer, options = {}) {
-    await loadNodeDeps();
-    if (!sharp) {
-      throw new Error("convertPNGBufferToVTF requires sharp, which is only available in Node.js. Use convertImageDataToVTF or CanvasToVTF in the browser.");
-    }
-    const format = options.format !== void 0 ? options.format : VTF_FORMATS.DXT5;
-    const generateMips = options.generateMips !== void 0 ? options.generateMips : true;
-    const clampToPowerOf2 = options.clampToPowerOf2 || false;
-    let image = sharp(pngBuffer);
-    const metadata = await image.metadata();
-    let width = options.width || metadata.width;
-    let height = options.height || metadata.height;
-    if (clampToPowerOf2 && (!isPowerOf2(width) || !isPowerOf2(height))) {
-      width = nextPowerOf2(width);
-      height = nextPowerOf2(height);
-    }
-    if (width !== metadata.width || height !== metadata.height) {
-      image = image.resize(width, height, { fit: "fill" });
-    }
-    const { data, info } = await image.ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-    width = info.width;
-    height = info.height;
-    return convertRGBAToVTF(data, width, height, format, {
-      generateMips,
-      flags: options.flags,
-      calculateReflectivityValue: true
-    });
+    return { vtfData, width, height, format };
   }
   function convertImageDataToVTF(imageData, options = {}) {
     const format = options.format !== void 0 ? options.format : VTF_FORMATS.DXT5;
@@ -8254,6 +8302,9 @@ var PNGToVTF = (() => {
     // Constants
     VTF_FORMATS,
     VTF_FLAGS,
+    MAX_VTF_DIMENSION,
+    SUPPORTED_INPUT_FORMATS,
+    DEFAULT_MAX_PIXELS,
     // Core conversion functions (work everywhere)
     convertRGBAToVTF,
     convertImageDataToVTF,
