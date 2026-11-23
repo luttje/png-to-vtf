@@ -13,7 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "node scripts/build.mjs",
-    "dev": "vite"
+    "dev": "vite docs"
   },
   "keywords": [
     "vtf",
@@ -57,6 +57,7 @@
   "devDependencies": {
     "@types/node": "^26.6.6",
     "esbuild": "^0.28.2",
+    "vite": "^8.3.8",
     "vitest": "^5.1.1"
   }
 }
