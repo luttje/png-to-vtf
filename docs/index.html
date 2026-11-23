@@ -5,219 +5,468 @@
   <meta charset="UTF-8">
   <meta name="viewport"
         content="width=device-width, initial-scale=1.0">
-  <title>PNG to VTF Converter - Browser Demo</title>
+  <title>PNG to VTF Converter</title>
   <style>
+    :root {
+      --bg: #4c5844;
+      --bg-dark: #3e4637;
+      --bevel-light: #889180;
+      --bevel-dark: #282e22;
+      --text: #d8ded3;
+      --text-dim: #a0aa95;
+      --text-bright: #ffffff;
+      --accent: #c4b550;
+      --select: #958831;
+      --error: #e8735a;
+      --font: Tahoma, Verdana, 'Segoe UI', sans-serif;
+      --mono: 'Lucida Console', 'Courier New', monospace;
+    }
+
     * {
       box-sizing: border-box;
     }
 
+    html {
+      background: #0c0d0b;
+    }
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 2rem;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      margin: 0;
       min-height: 100vh;
-      color: #e0e0e0;
+      font: 13px/1.4 var(--font);
+      color: var(--text);
+      background: linear-gradient(180deg, #262a22 0%, #121410 60%, #0c0d0b 100%);
     }
 
-    h1 {
-      color: #ff6b35;
-      text-align: center;
-      margin-bottom: 0.5rem;
+    .page {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 48px 16px 32px;
     }
 
-    .subtitle {
-      text-align: center;
-      color: #888;
-      margin-bottom: 2rem;
+    /* Main-menu style header */
+    .menu-title {
+      margin: 0;
+      font: bold 40px/1 Verdana, var(--font);
+      letter-spacing: 0.08em;
+      color: rgba(255, 255, 255, 0.85);
+      text-transform: uppercase;
     }
 
-    .container {
-      background: #1e1e2e;
-      border-radius: 12px;
-      padding: 2rem;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    .menu-subtitle {
+      margin: 8px 0 20px;
+      font-family: Verdana, var(--font);
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.45);
     }
 
-    .drop-zone {
-      border: 3px dashed #444;
-      border-radius: 12px;
-      padding: 3rem;
-      text-align: center;
+    .menu-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 24px;
+      margin: 0 0 28px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .menu-links a {
+      font: 15px Verdana, var(--font);
+      color: rgba(255, 255, 255, 0.6);
+      text-decoration: none;
+    }
+
+    .menu-links a:hover,
+    .menu-links a:focus-visible {
+      color: var(--text-bright);
+      outline: none;
+    }
+
+    /* Bevels */
+    .raised {
+      border: 1px solid;
+      border-color: var(--bevel-light) var(--bevel-dark) var(--bevel-dark) var(--bevel-light);
+    }
+
+    .sunken {
+      border: 1px solid;
+      border-color: var(--bevel-dark) var(--bevel-light) var(--bevel-light) var(--bevel-dark);
+    }
+
+    /* Frame */
+    .frame {
+      background: var(--bg);
+      padding: 6px 14px 14px;
+      box-shadow: 0 0 0 1px #000, 0 6px 24px rgba(0, 0, 0, 0.6);
+    }
+
+    .frame-title {
+      margin: 0 0 10px;
+      padding: 2px 0;
+      font-size: 13px;
+      font-weight: bold;
+      color: var(--text);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    /* Property sheet tabs */
+    .tabs {
+      display: flex;
+      gap: 2px;
+      margin-bottom: -1px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .tab {
+      font: inherit;
+      color: var(--text-dim);
+      background: var(--bg-dark);
+      padding: 3px 14px 2px;
       cursor: pointer;
-      transition: all 0.3s ease;
-      background: #252535;
+      border-bottom: none;
+      margin-top: 3px;
     }
 
-    .drop-zone:hover,
-    .drop-zone.dragover {
-      border-color: #ff6b35;
-      background: #2a2a3a;
+    .tab[aria-selected="true"] {
+      color: var(--text);
+      background: var(--bg);
+      margin-top: 0;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--bg);
     }
 
-    .drop-zone-icon {
-      font-size: 3rem;
-      margin-bottom: 1rem;
+    .tab:focus-visible {
+      outline: 1px dotted var(--text);
+      outline-offset: -4px;
     }
 
-    .options {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1rem;
-      margin: 1.5rem 0;
+    .sheet {
+      padding: 14px;
+      border-top: 1px solid var(--bevel-light);
     }
 
-    .option-group {
-      background: #252535;
-      padding: 1rem;
-      border-radius: 8px;
-    }
-
-    .option-group label {
-      display: block;
-      margin-bottom: 0.5rem;
-      color: #aaa;
-      font-size: 0.875rem;
-    }
-
-    select,
-    input[type="checkbox"] {
-      width: 100%;
-      padding: 0.5rem;
-      border: 1px solid #444;
-      border-radius: 6px;
-      background: #1e1e2e;
-      color: #e0e0e0;
-      font-size: 1rem;
-    }
-
-    .checkbox-group {
+    /* Section header with etched divider */
+    .section {
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: 8px;
+      margin: 0 0 8px;
+      font-size: 13px;
+      font-weight: normal;
+      color: var(--text);
     }
 
-    .checkbox-group input[type="checkbox"] {
-      width: auto;
+    .section::after {
+      content: '';
+      flex: 1;
+      border-top: 1px solid var(--bevel-dark);
+      border-bottom: 1px solid var(--bevel-light);
     }
 
-    .preview-container {
-      display: none;
-      margin-top: 2rem;
+    .section-gap {
+      margin-top: 16px;
     }
 
-    .preview-container.active {
-      display: block;
+    /* Drop zone */
+    .drop-zone {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 18px 14px;
+      background: var(--bg-dark);
+      cursor: pointer;
     }
 
+    .drop-zone.dragover {
+      outline: 1px solid var(--accent);
+      outline-offset: -2px;
+    }
+
+    .drop-zone-text {
+      color: var(--text-dim);
+      overflow-wrap: anywhere;
+    }
+
+    .drop-zone-text strong {
+      color: var(--text);
+      font-weight: normal;
+    }
+
+    /* Form rows */
+    .options {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 24px;
+    }
+
+    .field {
+      display: grid;
+      grid-template-columns: 110px 1fr;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .field>label {
+      color: var(--text);
+    }
+
+    .combo {
+      position: relative;
+    }
+
+    .combo select {
+      appearance: none;
+      width: 100%;
+      font: inherit;
+      color: var(--text);
+      background: var(--bg-dark);
+      border: 1px solid;
+      border-color: var(--bevel-dark) var(--bevel-light) var(--bevel-light) var(--bevel-dark);
+      border-radius: 0;
+      padding: 2px 24px 2px 5px;
+      cursor: pointer;
+    }
+
+    .combo select:focus-visible {
+      outline: none;
+      color: var(--text-bright);
+      background: var(--select);
+    }
+
+    .combo option {
+      background: var(--bg-dark);
+      color: var(--text);
+    }
+
+    .combo::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      bottom: 2px;
+      width: 17px;
+      pointer-events: none;
+      background:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='4'%3E%3Cpath d='M0 0h7L3.5 4z' fill='%23d8ded3'/%3E%3C/svg%3E") center / 7px 4px no-repeat,
+        var(--bg);
+      border: 1px solid;
+      border-color: var(--bevel-light) var(--bevel-dark) var(--bevel-dark) var(--bevel-light);
+    }
+
+    .check {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .check input {
+      appearance: none;
+      flex: none;
+      width: 13px;
+      height: 13px;
+      margin: 0;
+      background: var(--bg-dark);
+      border: 1px solid;
+      border-color: var(--bevel-dark) var(--bevel-light) var(--bevel-light) var(--bevel-dark);
+      border-radius: 0;
+      cursor: pointer;
+    }
+
+    .check input:checked {
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='9'%3E%3Cpath d='M1 4.5l2.5 2.5L8 1.5' stroke='%23d8ded3' stroke-width='1.6' fill='none'/%3E%3C/svg%3E") center / 9px 9px no-repeat, var(--bg-dark);
+    }
+
+    .check input:focus-visible {
+      outline: 1px dotted var(--text);
+      outline-offset: 2px;
+    }
+
+    /* Buttons */
+    .btn {
+      font: inherit;
+      color: var(--text);
+      background: var(--bg);
+      padding: 3px 16px;
+      min-width: 80px;
+      cursor: pointer;
+      border: 1px solid;
+      border-color: var(--bevel-light) var(--bevel-dark) var(--bevel-dark) var(--bevel-light);
+      border-radius: 0;
+      white-space: nowrap;
+    }
+
+    .btn:hover {
+      color: var(--text-bright);
+    }
+
+    .btn:active:not(:disabled) {
+      border-color: var(--bevel-dark) var(--bevel-light) var(--bevel-light) var(--bevel-dark);
+      padding: 4px 15px 2px 17px;
+    }
+
+    .btn:focus-visible {
+      outline: 1px dotted var(--text);
+      outline-offset: -4px;
+    }
+
+    .btn.default {
+      box-shadow: 0 0 0 1px #000;
+    }
+
+    .btn:disabled {
+      cursor: default;
+      color: var(--bevel-dark);
+      text-shadow: 1px 1px 0 var(--bevel-light);
+      box-shadow: none;
+    }
+
+    /* Previews */
     .preview-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 1.5rem;
+      gap: 24px;
     }
 
     .preview-box {
-      background: #252535;
-      padding: 1rem;
-      border-radius: 8px;
-      text-align: center;
-    }
-
-    .preview-box h3 {
-      margin: 0 0 1rem 0;
-      color: #ff6b35;
-      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 272px;
+      padding: 8px;
+      background: var(--bg-dark);
     }
 
     .preview-box img,
     .preview-box canvas {
+      display: block;
       max-width: 100%;
       max-height: 256px;
-      border-radius: 4px;
-      background: repeating-conic-gradient(#333 0% 25%, #444 0% 50%) 50% / 16px 16px;
+      image-rendering: auto;
+      background: repeating-conic-gradient(#3e4637 0% 25%, #4a5442 0% 50%) 50% / 16px 16px;
+    }
+
+    .preview-box .empty {
+      color: var(--text-dim);
     }
 
     .info {
-      margin-top: 1rem;
-      font-size: 0.875rem;
-      color: #888;
+      margin-top: 6px;
+      min-height: 3.6em;
+      color: var(--text-dim);
     }
 
-    .btn {
-      display: inline-block;
-      padding: 0.75rem 1.5rem;
-      background: #ff6b35;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-size: 1rem;
-      cursor: pointer;
-      transition: background 0.3s;
-      text-decoration: none;
+    .info:empty {
+      min-height: 0;
     }
 
-    .btn:hover {
-      background: #ff8555;
-    }
-
-    .btn:disabled {
-      background: #555;
-      cursor: not-allowed;
-    }
-
+    /* Bottom row */
     .actions {
-      margin-top: 1.5rem;
-      text-align: center;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 14px;
     }
 
     .status {
-      margin-top: 1rem;
-      padding: 1rem;
-      border-radius: 8px;
-      display: none;
+      flex: 1;
+      min-width: 0;
+      padding: 2px 6px;
+      background: var(--bg-dark);
+      color: var(--text-dim);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .status.success {
-      display: block;
-      background: rgba(46, 204, 113, 0.2);
-      border: 1px solid #2ecc71;
-      color: #2ecc71;
+      color: var(--accent);
     }
 
     .status.error {
-      display: block;
-      background: rgba(231, 76, 60, 0.2);
-      border: 1px solid #e74c3c;
-      color: #e74c3c;
+      color: var(--error);
+    }
+
+    /* Usage tab */
+    .usage p {
+      margin: 0 0 8px;
+    }
+
+    .usage a {
+      color: var(--accent);
+    }
+
+    pre {
+      margin: 0 0 16px;
+      padding: 8px 10px;
+      background: var(--bg-dark);
+      color: var(--text);
+      font: 12px/1.5 var(--mono);
+      overflow-x: auto;
+    }
+
+    /* Syntax highlighting, tuned for contrast on --bg-dark */
+    .t-kw {
+      color: #e6cf62;
+    }
+
+    .t-str {
+      color: #e2a971;
+    }
+
+    .t-fn {
+      color: #ffffff;
+    }
+
+    .t-const {
+      color: #a9d3df;
+    }
+
+    .t-lit {
+      color: #c7a6e0;
+    }
+
+    .t-prop {
+      color: #b9d98f;
+    }
+
+    .t-p,
+    .t-prompt {
+      color: var(--text-dim);
+    }
+
+    .t-prompt {
+      user-select: none;
     }
 
     footer {
-      text-align: center;
-      margin-top: 2rem;
-      color: #666;
+      margin-top: 20px;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.35);
     }
 
     footer a {
-      color: #ff6b35;
+      color: rgba(255, 255, 255, 0.55);
     }
 
     .hidden {
       display: none !important;
     }
 
-    /* Loading overlay */
+    /* Modal "please wait" dialog */
     .loading-overlay {
       position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(26, 26, 46, 0.9);
+      inset: 0;
       display: none;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
+      padding: 16px;
+      background: rgba(0, 0, 0, 0.45);
       z-index: 1000;
     }
 
@@ -225,156 +474,293 @@
       display: flex;
     }
 
-    .spinner {
-      width: 60px;
-      height: 60px;
-      border: 4px solid #333;
-      border-top-color: #ff6b35;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
-      }
-    }
-
-    .loading-text {
-      margin-top: 1.5rem;
-      color: #ff6b35;
-      font-size: 1.1rem;
-      font-weight: 500;
+    .loading-dialog {
+      width: 340px;
+      max-width: 100%;
     }
 
     .loading-subtext {
-      margin-top: 0.5rem;
-      color: #888;
-      font-size: 0.9rem;
+      margin: 0 0 10px;
+      color: var(--text-dim);
+    }
+
+    .progress {
+      height: 16px;
+      padding: 2px;
+      background: var(--bg-dark);
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0;
+      background: repeating-linear-gradient(90deg, var(--accent) 0 8px, transparent 8px 11px);
+      animation: progress 1.6s steps(28, end) infinite;
+    }
+
+    @keyframes progress {
+      to {
+        width: 100%;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .page {
+        padding-top: 28px;
+      }
+
+      .menu-title {
+        font-size: 28px;
+      }
+
+      .frame {
+        padding: 6px 8px 10px;
+      }
+
+      .sheet {
+        padding: 10px;
+      }
+
+      .options,
+      .preview-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .preview-grid {
+        gap: 12px;
+      }
+
+      .field {
+        grid-template-columns: 96px 1fr;
+      }
+
+      .drop-zone {
+        flex-direction: column;
+        align-items: stretch;
+        text-align: center;
+      }
+
+      .actions {
+        flex-direction: column-reverse;
+        align-items: stretch;
+      }
     }
   </style>
 </head>
 
 <body>
   <div class="loading-overlay"
-       id="loadingOverlay">
-    <div class="spinner"></div>
-    <div class="loading-text"
-         id="loadingText">Processing...</div>
-    <div class="loading-subtext"
-         id="loadingSubtext">This may take a moment for large images</div>
-  </div>
-
-  <h1>🎮 PNG to VTF Converter</h1>
-  <p class="subtitle">Convert PNG images to Valve Texture Format in your browser</p>
-
-  <div class="container">
-    <div class="drop-zone"
-         id="dropZone">
-      <div class="drop-zone-icon">📁</div>
-      <p>Drag & drop a PNG image here<br>or click to select</p>
-      <input type="file"
-             id="fileInput"
-             accept="image/png,image/jpeg,image/webp"
-             hidden>
-    </div>
-
-    <div class="options">
-      <div class="option-group">
-        <label for="format">Output Format</label>
-        <select id="format">
-          <option value="DXT5">DXT5 (Compressed with Alpha)</option>
-          <option value="DXT1">DXT1 (Compressed, No Alpha)</option>
-          <option value="BGRA8888">BGRA8888 (Uncompressed)</option>
-          <option value="RGB888">RGB888 (Uncompressed, No Alpha)</option>
-          <option value="BGR888">BGR888 (Uncompressed, No Alpha)</option>
-        </select>
-        <div class="checkbox-group"
-             style="margin-top: 0.75rem;">
-          <input type="checkbox"
-                 id="mipmaps"
-                 checked>
-          <label for="mipmaps">Generate Mipmaps</label>
-        </div>
+       id="loadingOverlay"
+       role="alertdialog"
+       aria-modal="true"
+       aria-labelledby="loadingText">
+    <div class="frame raised loading-dialog">
+      <h2 class="frame-title"
+          id="loadingText">Processing...</h2>
+      <p class="loading-subtext"
+         id="loadingSubtext">This may take a moment for large images</p>
+      <div class="progress sunken">
+        <div class="progress-fill"></div>
       </div>
-
-      <div class="option-group">
-        <label for="resize">Resize</label>
-        <select id="resize">
-          <option value="">Keep Original</option>
-          <option value="64">64 × 64</option>
-          <option value="128">128 × 128</option>
-          <option value="256">256 × 256</option>
-          <option value="512">512 × 512</option>
-          <option value="1024">1024 × 1024</option>
-          <option value="2048">2048 × 2048</option>
-        </select>
-        <div class="checkbox-group"
-             style="margin-top: 0.75rem;">
-          <input type="checkbox"
-                 id="keepAspect">
-          <label for="keepAspect">Keep Aspect Ratio</label>
-        </div>
-        <div id="alignmentGroup"
-             style="margin-top: 0.75rem; display: none;">
-          <label for="alignment"
-                 style="font-size: 0.8rem;">Alignment</label>
-          <select id="alignment">
-            <option value="top">Top</option>
-            <option value="left">Left</option>
-            <option value="center">Center</option>
-            <option value="right">Right</option>
-            <option value="bottom">Bottom</option>
-          </select>
-        </div>
-      </div>
-    </div>
-
-    <div class="preview-container"
-         id="previewContainer">
-      <div class="preview-grid">
-        <div class="preview-box">
-          <h3>📷 Original Image</h3>
-          <img id="originalPreview"
-               alt="Original">
-          <div class="info"
-               id="originalInfo"></div>
-        </div>
-        <div class="preview-box">
-          <h3>🎮 VTF Preview</h3>
-          <canvas id="vtfPreview"></canvas>
-          <div class="info"
-               id="vtfInfo"></div>
-        </div>
-      </div>
-
-      <div class="actions">
-        <button class="btn"
-                id="downloadBtn"
-                disabled>⬇️ Download VTF</button>
-      </div>
-
-      <div class="status"
-           id="status"></div>
     </div>
   </div>
 
-  <footer>
-    <p>
-      Powered by <a href="https://github.com/luttje/png-to-vtf"
-         target="_blank">png-to-vtf</a> |
-      Works with Source engine games like Garry's Mod, Counter-Strike, TF2, and Half-Life 2
-    </p>
-  </footer>
+  <div class="page">
+    <h1 class="menu-title">PNG to VTF</h1>
+    <p class="menu-subtitle">Convert images to Valve Texture Format, right in your browser.</p>
+
+    <ul class="menu-links">
+      <li><a href="https://github.com/luttje/png-to-vtf"
+           target="_blank"
+           rel="noopener">GitHub</a></li>
+      <li><a href="https://www.npmjs.com/package/png-to-vtf"
+           target="_blank"
+           rel="noopener">npm</a></li>
+      <li><a href="https://developer.valvesoftware.com/wiki/VTF_(Valve_Texture_Format)"
+           target="_blank"
+           rel="noopener">VTF format</a></li>
+    </ul>
+
+    <div class="frame raised">
+      <h2 class="frame-title">Texture Converter</h2>
+
+      <div class="tabs"
+           role="tablist">
+        <button class="tab raised"
+                role="tab"
+                id="tabConvert"
+                aria-controls="sheetConvert"
+                aria-selected="true">Convert</button>
+        <button class="tab raised"
+                role="tab"
+                id="tabUsage"
+                aria-controls="sheetUsage"
+                aria-selected="false"
+                tabindex="-1">Usage</button>
+      </div>
+
+      <div class="sheet raised"
+           role="tabpanel"
+           id="sheetConvert"
+           aria-labelledby="tabConvert">
+        <h3 class="section">Source image</h3>
+        <div class="drop-zone sunken"
+             id="dropZone">
+          <span class="drop-zone-text"
+                id="dropZoneText">Drop a PNG, JPEG or WebP image here, or browse for one.</span>
+          <button class="btn"
+                  type="button"
+                  id="browseBtn">Browse...</button>
+          <input type="file"
+                 id="fileInput"
+                 accept="image/png,image/jpeg,image/webp"
+                 hidden>
+        </div>
+
+        <h3 class="section section-gap">Output</h3>
+        <div class="options">
+          <div>
+            <div class="field">
+              <label for="format">Format</label>
+              <div class="combo">
+                <select id="format">
+                  <option value="DXT5">DXT5 (compressed, alpha)</option>
+                  <option value="DXT1">DXT1 (compressed, no alpha)</option>
+                  <option value="BGRA8888">BGRA8888 (uncompressed)</option>
+                  <option value="RGB888">RGB888 (no alpha)</option>
+                  <option value="BGR888">BGR888 (no alpha)</option>
+                </select>
+              </div>
+            </div>
+            <label class="check">
+              <input type="checkbox"
+                     id="mipmaps"
+                     checked>
+              Generate mipmaps
+            </label>
+          </div>
+
+          <div>
+            <div class="field">
+              <label for="resize">Resize</label>
+              <div class="combo">
+                <select id="resize">
+                  <option value="">Keep original</option>
+                  <option value="64">64 × 64</option>
+                  <option value="128">128 × 128</option>
+                  <option value="256">256 × 256</option>
+                  <option value="512">512 × 512</option>
+                  <option value="1024">1024 × 1024</option>
+                  <option value="2048">2048 × 2048</option>
+                </select>
+              </div>
+            </div>
+            <label class="check">
+              <input type="checkbox"
+                     id="keepAspect">
+              Keep aspect ratio
+            </label>
+            <div class="field"
+                 id="alignmentGroup"
+                 style="display: none;">
+              <label for="alignment">Alignment</label>
+              <div class="combo">
+                <select id="alignment">
+                  <option value="top">Top</option>
+                  <option value="left">Left</option>
+                  <option value="center">Center</option>
+                  <option value="right">Right</option>
+                  <option value="bottom">Bottom</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="preview-grid section-gap">
+          <div>
+            <h3 class="section">Original</h3>
+            <div class="preview-box sunken">
+              <img id="originalPreview"
+                   class="hidden"
+                   alt="Original image">
+              <span class="empty"
+                    id="originalEmpty">No image loaded</span>
+            </div>
+            <div class="info"
+                 id="originalInfo"></div>
+          </div>
+          <div>
+            <h3 class="section">VTF preview</h3>
+            <div class="preview-box sunken">
+              <canvas id="vtfPreview"
+                      class="hidden"></canvas>
+              <span class="empty"
+                    id="vtfEmpty">No image loaded</span>
+            </div>
+            <div class="info"
+                 id="vtfInfo"></div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <div class="status sunken"
+               id="status"
+               role="status">Ready.</div>
+          <button class="btn default"
+                  type="button"
+                  id="downloadBtn"
+                  disabled>Download VTF</button>
+        </div>
+      </div>
+
+      <div class="sheet raised usage hidden"
+           role="tabpanel"
+           id="sheetUsage"
+           aria-labelledby="tabUsage">
+        <h3 class="section">Install</h3>
+        <pre class="sunken"><code><span class="t-prompt">&gt; </span><span class="t-fn">npm</span> install <span class="t-str">png-to-vtf</span></code></pre>
+
+        <h3 class="section">Node.js</h3>
+        <pre class="sunken"><code><span class="t-kw">import</span> <span class="t-p">{</span> convertPNGToVTF<span class="t-p">,</span> <span class="t-const">VTF_FORMATS</span> <span class="t-p">}</span> <span class="t-kw">from</span> <span class="t-str">'png-to-vtf'</span><span class="t-p">;</span>
+
+<span class="t-kw">await</span> <span class="t-fn">convertPNGToVTF</span><span class="t-p">(</span><span class="t-str">'input.png'</span><span class="t-p">,</span> <span class="t-str">'output.vtf'</span><span class="t-p">, {</span>
+  <span class="t-prop">format</span><span class="t-p">:</span> <span class="t-const">VTF_FORMATS</span><span class="t-p">.</span><span class="t-const">DXT5</span><span class="t-p">,</span>
+  <span class="t-prop">clampToPowerOf2</span><span class="t-p">:</span> <span class="t-lit">true</span><span class="t-p">,</span>
+<span class="t-p">});</span></code></pre>
+
+        <h3 class="section">Browser</h3>
+        <pre class="sunken"><code><span class="t-kw">import</span> <span class="t-p">{</span> convertImageDataToVTF<span class="t-p">,</span> <span class="t-const">VTF_FORMATS</span> <span class="t-p">}</span>
+  <span class="t-kw">from</span> <span class="t-str">'https://unpkg.com/png-to-vtf/dist/png-to-vtf.browser.min.mjs'</span><span class="t-p">;</span>
+
+<span class="t-kw">const</span> imageData <span class="t-p">=</span> ctx<span class="t-p">.</span><span class="t-fn">getImageData</span><span class="t-p">(</span><span class="t-lit">0</span><span class="t-p">,</span> <span class="t-lit">0</span><span class="t-p">,</span> canvas<span class="t-p">.</span>width<span class="t-p">,</span> canvas<span class="t-p">.</span>height<span class="t-p">);</span>
+<span class="t-kw">const</span> vtf <span class="t-p">=</span> <span class="t-fn">convertImageDataToVTF</span><span class="t-p">(</span>imageData<span class="t-p">, {</span>
+  <span class="t-prop">format</span><span class="t-p">:</span> <span class="t-const">VTF_FORMATS</span><span class="t-p">.</span><span class="t-const">BGRA8888</span><span class="t-p">,</span>
+  <span class="t-prop">generateMips</span><span class="t-p">:</span> <span class="t-lit">true</span><span class="t-p">,</span>
+<span class="t-p">});</span></code></pre>
+
+        <p>See the <a href="https://github.com/luttje/png-to-vtf#api-reference"
+             target="_blank"
+             rel="noopener">API reference</a> for all formats, flags and options.</p>
+      </div>
+    </div>
+
+    <footer>
+      Works with Source engine games such as Garry's Mod, Counter-Strike: Source, Team Fortress 2 and Half-Life 2.
+    </footer>
+  </div>
 
   <script type="module">
     import { convertImageDataToVTF, VTF_FORMATS, VTF_FLAGS } from './png-to-vtf.browser.min.mjs';
 
     const dropZone = document.getElementById('dropZone');
+    const dropZoneText = document.getElementById('dropZoneText');
+    const browseBtn = document.getElementById('browseBtn');
     const fileInput = document.getElementById('fileInput');
-    const previewContainer = document.getElementById('previewContainer');
     const originalPreview = document.getElementById('originalPreview');
+    const originalEmpty = document.getElementById('originalEmpty');
     const vtfPreview = document.getElementById('vtfPreview');
+    const vtfEmpty = document.getElementById('vtfEmpty');
     const originalInfo = document.getElementById('originalInfo');
     const vtfInfo = document.getElementById('vtfInfo');
     const downloadBtn = document.getElementById('downloadBtn');
@@ -392,7 +778,29 @@
     let currentFileName = 'texture.vtf';
     let currentImageData = null;
 
-    // Loading overlay helpers
+    // Tabs
+    const tabs = [...document.querySelectorAll('[role="tab"]')];
+
+    function selectTab(tab) {
+      for (const t of tabs) {
+        const selected = t === tab;
+        t.setAttribute('aria-selected', selected);
+        t.tabIndex = selected ? 0 : -1;
+        document.getElementById(t.getAttribute('aria-controls')).classList.toggle('hidden', !selected);
+      }
+    }
+
+    tabs.forEach((tab, i) => {
+      tab.addEventListener('click', () => selectTab(tab));
+      tab.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+        const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+        selectTab(next);
+        next.focus();
+      });
+    });
+
+    // Loading dialog helpers
     function showLoading(text = 'Processing...', subtext = 'This may take a moment for large images') {
       loadingText.textContent = text;
       loadingSubtext.textContent = subtext;
@@ -405,6 +813,10 @@
 
     // Drop zone events
     dropZone.addEventListener('click', () => fileInput.click());
+    browseBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fileInput.click();
+    });
 
     dropZone.addEventListener('dragover', (e) => {
       e.preventDefault();
@@ -444,7 +856,7 @@
         alignmentGroup.style.display = 'none';
       } else if (height > width) {
         // Taller than wide - show horizontal alignment options
-        alignmentGroup.style.display = 'block';
+        alignmentGroup.style.display = '';
         alignmentSelect.innerHTML = `
           <option value="left">Left</option>
           <option value="center" selected>Center</option>
@@ -452,7 +864,7 @@
         `;
       } else {
         // Wider than tall - show vertical alignment options
-        alignmentGroup.style.display = 'block';
+        alignmentGroup.style.display = '';
         alignmentSelect.innerHTML = `
           <option value="top">Top</option>
           <option value="center" selected>Center</option>
@@ -473,7 +885,7 @@
     updateAlignmentVisibility();
 
     async function handleFile(file) {
-      showStatus('', '');
+      showStatus('Loading image...');
       showLoading('Loading image...', 'Please wait');
       await yieldToMain();
 
@@ -485,7 +897,13 @@
       img.onload = async () => {
         // Show original preview
         originalPreview.src = img.src;
+        originalPreview.classList.remove('hidden');
+        originalEmpty.classList.add('hidden');
         originalInfo.textContent = `${img.width} × ${img.height} pixels`;
+        dropZoneText.innerHTML = '';
+        const name = document.createElement('strong');
+        name.textContent = file.name;
+        dropZoneText.append(name, ' loaded. Drop another image to replace it.');
 
         // Get image data from canvas
         const canvas = document.createElement('canvas');
@@ -495,14 +913,14 @@
         ctx.drawImage(img, 0, 0);
         currentImageData = ctx.getImageData(0, 0, img.width, img.height);
 
-        previewContainer.classList.add('active');
         updateAlignmentVisibility();
         await updatePreview();
         hideLoading();
       };
 
       img.onerror = () => {
-        showStatus('Failed to load image', 'error');
+        hideLoading();
+        showStatus('Error: failed to load image.', 'error');
       };
 
       img.src = URL.createObjectURL(file);
@@ -628,9 +1046,11 @@
       tempCtx.putImageData(imageData, 0, 0);
 
       ctx.drawImage(tempCanvas, 0, 0, previewWidth, previewHeight);
+      vtfPreview.classList.remove('hidden');
+      vtfEmpty.classList.add('hidden');
 
       downloadBtn.disabled = false;
-      showStatus('', '');
+      showStatus(`Ready to export ${currentFileName}.`);
     }
 
     downloadBtn.addEventListener('click', async () => {
@@ -671,18 +1091,19 @@
         URL.revokeObjectURL(url);
 
         hideLoading();
-        showStatus(`✅ Downloaded ${currentFileName} (${(vtfBuffer.byteLength / 1024).toFixed(1)} KB)`, 'success');
+        showStatus(`Saved ${currentFileName} (${(vtfBuffer.byteLength / 1024).toFixed(1)} KB).`, 'success');
 
       } catch (error) {
         hideLoading();
         console.error('Conversion error:', error);
-        showStatus(`❌ Error: ${error.message}`, 'error');
+        showStatus(`Error: ${error.message}`, 'error');
       }
     });
 
     function showStatus(message, type) {
       statusEl.textContent = message;
-      statusEl.className = 'status';
+      statusEl.title = message;
+      statusEl.className = 'status sunken';
       if (type) {
         statusEl.classList.add(type);
       }
