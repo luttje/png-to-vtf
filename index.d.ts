@@ -111,6 +111,15 @@ export type VTFFlag = typeof VTF_FLAGS[keyof typeof VTF_FLAGS];
 /** Largest width/height a VTF header can store (uint16) */
 export const MAX_VTF_DIMENSION: 65535;
 
+/** Encoded image formats that can be enabled through `allowedInputFormats` */
+export type InputFormat = 'png' | 'jpeg' | 'webp' | 'gif' | 'avif';
+
+/** Every format `allowedInputFormats` may contain. Only `'png'` is enabled by default. */
+export const SUPPORTED_INPUT_FORMATS: readonly InputFormat[];
+
+/** Default `maxPixels` limit: 8192 x 8192 */
+export const DEFAULT_MAX_PIXELS: number;
+
 export interface ConversionOptions {
   /** VTF format (default: RGBA8888) */
   format?: VTFFormat;
@@ -124,6 +133,16 @@ export interface ConversionOptions {
   flags?: number;
   /** Resize to nearest power of 2 (default: false) */
   clampToPowerOf2?: boolean;
+  /**
+   * Encoded formats to accept (default: `['png']`). Input in any other format
+   * is rejected before it is decoded. See `SUPPORTED_INPUT_FORMATS`.
+   */
+  allowedInputFormats?: InputFormat[];
+  /**
+   * Maximum number of pixels (width * height) allowed in both the source image
+   * and the output texture (default: `DEFAULT_MAX_PIXELS`, 8192 x 8192)
+   */
+  maxPixels?: number;
 }
 
 export interface ConversionResult {
@@ -172,6 +191,8 @@ export interface RGBAToVTFOptions {
  * @param options - Conversion options
  * @returns Conversion result info
  * @throws Error if sharp is not available (browser environment)
+ * @throws Error if the file is not in one of the allowed input formats
+ * @throws RangeError if the source or output image exceeds the size limits
  */
 export function convertPNGToVTF(
   inputPath: string,
@@ -185,9 +206,12 @@ export function convertPNGToVTF(
  * @param options - Conversion options
  * @returns VTF file buffer
  * @throws Error if sharp is not available (browser environment)
+ * @throws Error if the data is not in one of the allowed input formats
+ * @throws TypeError if pngBuffer is not binary data (strings are not treated as paths)
+ * @throws RangeError if the source or output image exceeds the size limits
  */
 export function convertPNGBufferToVTF(
-  pngBuffer: Buffer,
+  pngBuffer: Buffer | Uint8Array | ArrayBuffer,
   options?: ConversionOptions
 ): Promise<Buffer>;
 

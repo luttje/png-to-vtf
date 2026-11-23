@@ -111,8 +111,14 @@ Converts a PNG file to VTF format and saves it to disk. **Node.js only** - requi
 | `options.generateMips` | `boolean` | Generate mipmaps (default: `true`) |
 | `options.flags` | `number` | VTF flags (auto-detected if not specified) |
 | `options.clampToPowerOf2` | `boolean` | Auto-resize to nearest power of 2 (default: `false`) |
+| `options.allowedInputFormats` | `string[]` | Encoded formats to accept (default: `['png']`). May also contain `'jpeg'`, `'webp'`, `'gif'` and `'avif'` |
+| `options.maxPixels` | `number` | Maximum `width * height` of both the source image and the output (default: `8192 * 8192`) |
 
 **Returns:** `Promise<{ width, height, format }>`
+
+**Throws:** `Error` if the input is not in an allowed format, `RangeError` if the source or output size exceeds `maxPixels` or a dimension is not an integer between 1 and 65535.
+
+> **Untrusted input:** the format is checked from the file's leading bytes before it is decoded, so anything not listed in `allowedInputFormats` never reaches an image decoder. SVG cannot be enabled. If you convert user uploads, keep the allowed list as short as you can and consider lowering `maxPixels`.
 
 **Example:**
 
@@ -138,7 +144,7 @@ Converts a PNG buffer to VTF format and returns the VTF data as a buffer. **Node
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `pngBuffer` | `Buffer` | PNG image data as a buffer |
+| `pngBuffer` | `Buffer`, `Uint8Array` or `ArrayBuffer` | PNG image data. Strings are rejected rather than treated as file paths |
 | `options` | `object` | Optional conversion settings (same as `convertPNGToVTF`) |
 
 **Returns:** `Promise<Buffer>` - VTF file data

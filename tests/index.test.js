@@ -17,7 +17,9 @@ import {
   generateMipmaps,
   compressToDXT,
   calculateDXTSize,
-  MAX_VTF_DIMENSION
+  MAX_VTF_DIMENSION,
+  SUPPORTED_INPUT_FORMATS,
+  DEFAULT_MAX_PIXELS
 } from '../index.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -906,6 +908,121 @@ describe('Input Validation', () => {
     it('should accept the largest representable dimensions', () => {
       const header = createVTFHeader(MAX_VTF_DIMENSION, 1, VTF_FORMATS.RGBA8888);
       expect(header[16] | (header[17] << 8)).toBe(MAX_VTF_DIMENSION);
+    });
+  });
+});
+
+// ============================================================================
+// Encoded Input Restrictions (convertPNGToVTF / convertPNGBufferToVTF)
+// ============================================================================
+
+describe('Encoded Input Restrictions', () => {
+  const SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="red"/></svg>');
+  let pngBuffer;
+  let jpegBuffer;
+
+  beforeAll(async () => {
+    const { default: sharp } = await import('sharp');
+    pngBuffer = fs.readFileSync(TEST_PNG);
+    jpegBuffer = await sharp({ create: { width: 8, height: 8, channels: 3, background: '#336699' } }).jpeg().toBuffer();
+  });
+
+  describe('input format', () => {
+    it('should reject SVG input', async () => {
+      await expect(convertPNGBufferToVTF(SVG)).rejects.toThrow(/Unsupported input image format/);
+    });
+
+    it('should not allow SVG to be opted in', async () => {
+      await expect(convertPNGBufferToVTF(SVG, { allowedInputFormats: ['png', 'svg'] }))
+        .rejects.toThrow(TypeError);
+    });
+
+    it('should reject JPEG input by default', async () => {
+      await expect(convertPNGBufferToVTF(jpegBuffer)).rejects.toThrow(/Unsupported input image format \(jpeg\)/);
+    });
+
+    it('should accept JPEG input when opted in', async () => {
+      const vtf = await convertPNGBufferToVTF(jpegBuffer, {
+        allowedInputFormats: ['png', 'jpeg'],
+        format: VTF_FORMATS.RGBA8888,
+        generateMips: false
+      });
+      expect(vtf.length).toBe(80 + 8 * 8 * 4);
+    });
+
+    it('should reject PNG input when PNG is not in the allowed list', async () => {
+      await expect(convertPNGBufferToVTF(pngBuffer, { allowedInputFormats: ['jpeg'] }))
+        .rejects.toThrow(/Unsupported input image format \(png\)/);
+    });
+
+    it('should reject unrecognised data', async () => {
+      await expect(convertPNGBufferToVTF(Buffer.from('definitely not an image')))
+        .rejects.toThrow(/unrecognised/);
+      await expect(convertPNGBufferToVTF(Buffer.alloc(0))).rejects.toThrow(/unrecognised/);
+    });
+
+    it('should reject a string instead of treating it as a file path', async () => {
+      await expect(convertPNGBufferToVTF(TEST_PNG)).rejects.toThrow(TypeError);
+    });
+
+    it('should accept Uint8Array and ArrayBuffer input', async () => {
+      const bytes = new Uint8Array(pngBuffer);
+      const options = { format: VTF_FORMATS.RGBA8888, generateMips: false };
+      const expected = await convertPNGBufferToVTF(pngBuffer, options);
+
+      expect(Buffer.compare(await convertPNGBufferToVTF(bytes, options), expected)).toBe(0);
+      expect(Buffer.compare(await convertPNGBufferToVTF(bytes.buffer, options), expected)).toBe(0);
+    });
+
+    it('should reject a non-PNG file without writing any output', async () => {
+      const inputPath = path.join(OUTPUT_DIR, 'not_a_png.jpg');
+      const outputPath = path.join(OUTPUT_DIR, 'not_a_png.vtf');
+      fs.writeFileSync(inputPath, jpegBuffer);
+
+      await expect(convertPNGToVTF(inputPath, outputPath)).rejects.toThrow(/Unsupported input image format/);
+      expect(fs.existsSync(outputPath)).toBe(false);
+    });
+  });
+
+  describe('size limits', () => {
+    it('should export sensible defaults', () => {
+      expect(SUPPORTED_INPUT_FORMATS).toContain('png');
+      expect(SUPPORTED_INPUT_FORMATS).not.toContain('svg');
+      expect(DEFAULT_MAX_PIXELS).toBe(8192 * 8192);
+    });
+
+    it('should reject a requested size above the default pixel limit', async () => {
+      await expect(convertPNGBufferToVTF(pngBuffer, { width: 16384, height: 8192 }))
+        .rejects.toThrow(/exceeds the limit/);
+    });
+
+    it('should reject a requested size above the VTF dimension limit', async () => {
+      await expect(convertPNGBufferToVTF(pngBuffer, { width: MAX_VTF_DIMENSION + 1, height: 1, maxPixels: 2 ** 40 }))
+        .rejects.toThrow(RangeError);
+    });
+
+    it('should reject non-integer and negative sizes', async () => {
+      await expect(convertPNGBufferToVTF(pngBuffer, { width: 12.5, height: 16 })).rejects.toThrow(RangeError);
+      await expect(convertPNGBufferToVTF(pngBuffer, { width: -16, height: 16 })).rejects.toThrow(RangeError);
+    });
+
+    it('should reject a source image larger than maxPixels', async () => {
+      await expect(convertPNGBufferToVTF(pngBuffer, { maxPixels: 16 })).rejects.toThrow(/exceeds/);
+    });
+
+    it('should apply maxPixels to the output size as well', async () => {
+      // Source fits within the limit, the requested output does not
+      await expect(convertPNGBufferToVTF(jpegBuffer, {
+        allowedInputFormats: ['jpeg'],
+        maxPixels: 64,
+        width: 16,
+        height: 16
+      })).rejects.toThrow(/Output size 16x16 exceeds/);
+    });
+
+    it('should reject an invalid maxPixels', async () => {
+      await expect(convertPNGBufferToVTF(pngBuffer, { maxPixels: 0 })).rejects.toThrow(TypeError);
+      await expect(convertPNGBufferToVTF(pngBuffer, { maxPixels: Infinity })).rejects.toThrow(TypeError);
     });
   });
 });

@@ -1090,43 +1090,9 @@ export async function convertPNGToVTF(inputPath, outputPath, options = {}) {
     throw new Error('convertPNGToVTF requires fs, which is only available in Node.js.');
   }
 
-  const format = options.format !== undefined ? options.format : VTF_FORMATS.DXT5;
-  const generateMips = options.generateMips !== undefined ? options.generateMips : true;
-  const clampToPowerOf2 = options.clampToPowerOf2 || false;
-
-  // Load the image with sharp
-  let image = sharp(inputPath);
-  const metadata = await image.metadata();
-
-  let width = options.width || metadata.width;
-  let height = options.height || metadata.height;
-
-  // Optionally clamp to power of 2
-  if (clampToPowerOf2 && (!isPowerOf2(width) || !isPowerOf2(height))) {
-    width = nextPowerOf2(width);
-    height = nextPowerOf2(height);
-  }
-
-  // Resize if dimensions were specified or clamped
-  if (width !== metadata.width || height !== metadata.height) {
-    image = image.resize(width, height, { fit: 'fill' });
-  }
-
-  // Get raw RGBA pixel data
-  const { data, info } = await image
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-
-  width = info.width;
-  height = info.height;
-
-  // Convert to VTF
-  const vtfData = convertRGBAToVTF(data, width, height, format, {
-    generateMips,
-    flags: options.flags,
-    calculateReflectivityValue: true
-  });
+  // Read the file once and work from that buffer, so the bytes whose format we
+  // check are the same bytes that get decoded.
+  const { vtfData, width, height, format } = await convertEncodedImageToVTF(fs.readFileSync(inputPath), options);
 
   // Write to file
   fs.writeFileSync(outputPath, vtfData);
@@ -1154,13 +1120,102 @@ export async function convertPNGBufferToVTF(pngBuffer, options = {}) {
     throw new Error('convertPNGBufferToVTF requires sharp, which is only available in Node.js. Use convertImageDataToVTF or CanvasToVTF in the browser.');
   }
 
+  const { vtfData } = await convertEncodedImageToVTF(pngBuffer, options);
+
+  return vtfData;
+}
+
+/**
+ * Input formats that may be enabled through options.allowedInputFormats.
+ * Only PNG is enabled by default. Formats outside this list (notably SVG,
+ * which is parsed by a much larger and more exposed library) can never be
+ * enabled.
+ * @const
+ * @type {ReadonlyArray<string>}
+ */
+export const SUPPORTED_INPUT_FORMATS = Object.freeze(['png', 'jpeg', 'webp', 'gif', 'avif']);
+
+/**
+ * Default limit on the number of pixels in the source image and in the output
+ * texture (8192 x 8192, larger than any Source engine branch loads).
+ * @const
+ * @type {number}
+ */
+export const DEFAULT_MAX_PIXELS = 8192 * 8192;
+
+/**
+ * Identify an image format from its leading "magic" bytes.
+ *
+ * Done here rather than by asking sharp, so that data in a format we do not
+ * accept never reaches that format's decoder at all.
+ * @param {Uint8Array} bytes - Encoded image data
+ * @returns {string|null} One of SUPPORTED_INPUT_FORMATS, or null if unrecognised
+ */
+function detectImageFormat(bytes) {
+  const startsWith = (signature, offset = 0) =>
+    bytes.length >= offset + signature.length &&
+    signature.every((byte, i) => bytes[offset + i] === byte);
+  const ascii = (text) => Array.from(text, (char) => char.charCodeAt(0));
+
+  if (startsWith([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])) return 'png';
+  if (startsWith([0xFF, 0xD8, 0xFF])) return 'jpeg';
+  if (startsWith(ascii('RIFF')) && startsWith(ascii('WEBP'), 8)) return 'webp';
+  if (startsWith(ascii('GIF87a')) || startsWith(ascii('GIF89a'))) return 'gif';
+  if (startsWith(ascii('ftyp'), 4) && (startsWith(ascii('avif'), 8) || startsWith(ascii('avis'), 8))) return 'avif';
+
+  return null;
+}
+
+/**
+ * Decode an encoded image (PNG by default) and convert it to VTF.
+ * Shared implementation of convertPNGToVTF and convertPNGBufferToVTF.
+ * Requires loadNodeDeps() to have resolved sharp.
+ * @param {Buffer|Uint8Array|ArrayBuffer} input - Encoded image data
+ * @param {Object} options - Conversion options (see convertPNGBufferToVTF)
+ * @returns {Promise<{vtfData: Buffer, width: number, height: number, format: number}>}
+ * @throws {TypeError} If input is not binary data, or an option is invalid
+ * @throws {Error} If the image is not in an allowed format
+ * @throws {RangeError} If the source or output image is too large
+ */
+async function convertEncodedImageToVTF(input, options) {
   const format = options.format !== undefined ? options.format : VTF_FORMATS.DXT5;
   const generateMips = options.generateMips !== undefined ? options.generateMips : true;
   const clampToPowerOf2 = options.clampToPowerOf2 || false;
+  const allowedInputFormats = options.allowedInputFormats !== undefined ? options.allowedInputFormats : ['png'];
+  const maxPixels = options.maxPixels !== undefined ? options.maxPixels : DEFAULT_MAX_PIXELS;
+
+  if (!Array.isArray(allowedInputFormats) || allowedInputFormats.some((f) => !SUPPORTED_INPUT_FORMATS.includes(f))) {
+    throw new TypeError(`allowedInputFormats must be an array containing only: ${SUPPORTED_INPUT_FORMATS.join(', ')}.`);
+  }
+  if (!Number.isInteger(maxPixels) || maxPixels < 1) {
+    throw new TypeError('maxPixels must be a positive integer.');
+  }
+
+  // Only accept actual binary data. sharp treats a string as a file path, so
+  // letting one through would turn "convert this buffer" into "read this file".
+  if (input instanceof ArrayBuffer) {
+    input = new Uint8Array(input);
+  }
+  if (!(input instanceof Uint8Array)) {
+    throw new TypeError('Image data must be a Buffer, Uint8Array or ArrayBuffer.');
+  }
+
+  const detectedFormat = detectImageFormat(input);
+  if (!detectedFormat || !allowedInputFormats.includes(detectedFormat)) {
+    throw new Error(`Unsupported input image format (${detectedFormat || 'unrecognised'}). Allowed: ${allowedInputFormats.join(', ')}.`);
+  }
 
   // Load the image with sharp
-  let image = sharp(pngBuffer);
+  let image = sharp(input, { limitInputPixels: maxPixels });
   const metadata = await image.metadata();
+
+  // sharp sniffs the content itself; make sure it agrees with us
+  if (metadata.format !== detectedFormat) {
+    throw new Error(`Unsupported input image format (${metadata.format}). Allowed: ${allowedInputFormats.join(', ')}.`);
+  }
+  if (metadata.width * metadata.height > maxPixels) {
+    throw new RangeError(`Source image ${metadata.width}x${metadata.height} exceeds the limit of ${maxPixels} pixels (see the maxPixels option).`);
+  }
 
   let width = options.width || metadata.width;
   let height = options.height || metadata.height;
@@ -1169,6 +1224,12 @@ export async function convertPNGBufferToVTF(pngBuffer, options = {}) {
   if (clampToPowerOf2 && (!isPowerOf2(width) || !isPowerOf2(height))) {
     width = nextPowerOf2(width);
     height = nextPowerOf2(height);
+  }
+
+  // Check the output size before asking sharp to allocate it
+  assertValidDimensions(width, height);
+  if (width * height > maxPixels) {
+    throw new RangeError(`Output size ${width}x${height} exceeds the limit of ${maxPixels} pixels (see the maxPixels option).`);
   }
 
   // Resize if dimensions were specified or clamped
@@ -1186,11 +1247,13 @@ export async function convertPNGBufferToVTF(pngBuffer, options = {}) {
   height = info.height;
 
   // Convert to VTF
-  return convertRGBAToVTF(data, width, height, format, {
+  const vtfData = convertRGBAToVTF(data, width, height, format, {
     generateMips,
     flags: options.flags,
     calculateReflectivityValue: true
   });
+
+  return { vtfData, width, height, format };
 }
 
 // ============================================================================
@@ -1350,6 +1413,8 @@ const PNGToVTF = {
   VTF_FORMATS,
   VTF_FLAGS,
   MAX_VTF_DIMENSION,
+  SUPPORTED_INPUT_FORMATS,
+  DEFAULT_MAX_PIXELS,
 
   // Core conversion functions (work everywhere)
   convertRGBAToVTF,
