@@ -108,6 +108,9 @@ export const VTF_FLAGS: {
 export type VTFFormat = typeof VTF_FORMATS[keyof typeof VTF_FORMATS];
 export type VTFFlag = typeof VTF_FLAGS[keyof typeof VTF_FLAGS];
 
+/** Largest width/height a VTF header can store (uint16) */
+export const MAX_VTF_DIMENSION: 65535;
+
 export interface ConversionOptions {
   /** VTF format (default: RGBA8888) */
   format?: VTFFormat;
@@ -197,9 +200,11 @@ export function convertPNGBufferToVTF(
  * @param format - VTF format constant (default: RGBA8888)
  * @param generateMipsOrOptions - Whether to generate mipmaps (boolean) or options object
  * @returns VTF file data
+ * @throws RangeError if the dimensions are not integers between 1 and 65535,
+ *   or rgbaData is not exactly width * height * 4 bytes
  */
 export function convertRGBAToVTF(
-  rgbaData: Buffer | Uint8Array,
+  rgbaData: Buffer | Uint8Array | Uint8ClampedArray,
   width: number,
   height: number,
   format?: VTFFormat,
@@ -213,6 +218,7 @@ export function convertRGBAToVTF(
  * @param format - VTF format constant
  * @param options - Header options
  * @returns VTF header (80 bytes)
+ * @throws RangeError if width or height is not an integer between 1 and 65535
  */
 export function createVTFHeader(
   width: number,
@@ -263,6 +269,8 @@ export function generateMipmaps(rgbaData: Buffer, width: number, height: number)
  * @param height - Image height
  * @param format - VTF DXT format (DXT1, DXT3, DXT5)
  * @returns DXT compressed data
+ * @throws RangeError if the dimensions are not integers between 1 and 65535,
+ *   or rgbaData is not exactly width * height * 4 bytes
  */
 export function compressToDXT(
   rgbaData: Buffer,

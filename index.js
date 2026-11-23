@@ -226,6 +226,54 @@ export function nextPowerOf2(n) {
 }
 
 /**
+ * Largest width/height a VTF header can store (uint16)
+ * @const
+ * @type {number}
+ */
+export const MAX_VTF_DIMENSION = 65535;
+
+/**
+ * Validate that width and height are integers a VTF header can represent
+ * @param {number} width - Image width
+ * @param {number} height - Image height
+ * @returns {void}
+ * @throws {RangeError} If a dimension is not an integer between 1 and 65535
+ */
+function assertValidDimensions(width, height) {
+  for (const [name, value] of [['width', width], ['height', height]]) {
+    if (!Number.isInteger(value) || value < 1 || value > MAX_VTF_DIMENSION) {
+      throw new RangeError(`Invalid ${name} ${value}: must be an integer between 1 and ${MAX_VTF_DIMENSION}.`);
+    }
+  }
+}
+
+/**
+ * Validate that a buffer holds exactly width * height RGBA pixels.
+ *
+ * This matters for more than correctness: the DXT compressor reads
+ * width * height * 4 bytes regardless of how many were supplied, so an
+ * undersized buffer would leak pixels from previous conversions into the output.
+ * @param {Buffer|Uint8Array|Uint8ClampedArray} rgbaData - RGBA pixel data
+ * @param {number} width - Image width
+ * @param {number} height - Image height
+ * @returns {void}
+ * @throws {RangeError} If the dimensions are invalid or do not match the data length
+ * @throws {TypeError} If rgbaData is not array-like
+ */
+function assertValidRGBAInput(rgbaData, width, height) {
+  assertValidDimensions(width, height);
+
+  if (rgbaData == null || typeof rgbaData.length !== 'number') {
+    throw new TypeError('rgbaData must be a Buffer or typed array of RGBA pixel data.');
+  }
+
+  const expectedLength = width * height * 4;
+  if (rgbaData.length !== expectedLength) {
+    throw new RangeError(`rgbaData length ${rgbaData.length} does not match ${width}x${height} RGBA (expected ${expectedLength} bytes).`);
+  }
+}
+
+/**
  * Get bytes per pixel for a given format
  * @param {number} format - VTF format constant from VTF_FORMATS
  * @returns {number} Bytes per pixel (may be fractional for DXT formats)
@@ -558,8 +606,11 @@ export function calculateDXTSize(width, height, format) {
  * @param {number} format - VTF DXT format (DXT1, DXT3, or DXT5 from VTF_FORMATS)
  * @returns {Buffer} DXT compressed data
  * @throws {Error} If format is not a supported DXT format
+ * @throws {RangeError} If the dimensions are invalid or do not match the data length
  */
 export function compressToDXT(rgbaData, width, height, format) {
+  assertValidRGBAInput(rgbaData, width, height);
+
   // Determine dxt-js flags based on format
   let dxtFlags;
   switch (format) {
@@ -632,8 +683,11 @@ export function compressToDXT(rgbaData, width, height, format) {
  * @param {number} [options.bumpmapScale=1.0] - Bumpmap scale
  * @param {number} [options.depth=1] - Texture depth (for volumetric textures)
  * @returns {Buffer} VTF header (80 bytes)
+ * @throws {RangeError} If width or height is not an integer between 1 and 65535
  */
 export function createVTFHeader(width, height, format, options = {}) {
+  assertValidDimensions(width, height);
+
   const {
     mipmaps = false,
     flags = null,
@@ -927,8 +981,11 @@ function calculateReflectivity(rgbaData) {
  * @param {number} [generateMipsOrOptions.frames=1] - Number of animation frames
  * @param {number} [generateMipsOrOptions.bumpmapScale=1.0] - Bumpmap scale
  * @returns {Buffer} VTF file data
+ * @throws {RangeError} If the dimensions are invalid or do not match the data length
  */
 export function convertRGBAToVTF(rgbaData, width, height, format = VTF_FORMATS.RGBA8888, generateMipsOrOptions = true) {
+  assertValidRGBAInput(rgbaData, width, height);
+
   // Handle legacy boolean parameter or new options object
   let options = {};
   if (typeof generateMipsOrOptions === 'boolean') {
@@ -1292,6 +1349,7 @@ const PNGToVTF = {
   // Constants
   VTF_FORMATS,
   VTF_FLAGS,
+  MAX_VTF_DIMENSION,
 
   // Core conversion functions (work everywhere)
   convertRGBAToVTF,

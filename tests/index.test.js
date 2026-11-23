@@ -16,7 +16,8 @@ import {
   convertToFormat,
   generateMipmaps,
   compressToDXT,
-  calculateDXTSize
+  calculateDXTSize,
+  MAX_VTF_DIMENSION
 } from '../index.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -833,6 +834,78 @@ describe('VTFEdit Reference Comparison', () => {
         expect(header.width).toBe(512);
         expect(header.height).toBe(512);
       }
+    });
+  });
+});
+
+// ============================================================================
+// Input Validation
+// ============================================================================
+
+describe('Input Validation', () => {
+  const rgba = (w, h, fill = 0) => new Uint8Array(w * h * 4).fill(fill);
+
+  describe('convertRGBAToVTF', () => {
+    it('should reject data shorter than width * height * 4', () => {
+      expect(() => convertRGBAToVTF(new Uint8Array(16), 64, 64, VTF_FORMATS.RGBA8888, false))
+        .toThrow(RangeError);
+    });
+
+    it('should reject data longer than width * height * 4', () => {
+      expect(() => convertRGBAToVTF(rgba(8, 8), 4, 4, VTF_FORMATS.RGBA8888, false))
+        .toThrow(RangeError);
+    });
+
+    it.each([
+      ['zero', 0, 4],
+      ['negative', -4, 4],
+      ['fractional', 4, 2.5],
+      ['NaN', NaN, 4],
+      ['a string', '4', 4],
+      ['above the uint16 limit', MAX_VTF_DIMENSION + 1, 4]
+    ])('should reject a dimension that is %s', (_label, width, height) => {
+      expect(() => convertRGBAToVTF(new Uint8Array(64), width, height, VTF_FORMATS.RGBA8888, false))
+        .toThrow(RangeError);
+    });
+
+    it('should reject missing pixel data', () => {
+      expect(() => convertRGBAToVTF(null, 4, 4)).toThrow(TypeError);
+    });
+
+    it('should accept Uint8ClampedArray input (canvas ImageData)', () => {
+      const vtf = convertRGBAToVTF(new Uint8ClampedArray(4 * 4 * 4), 4, 4, VTF_FORMATS.RGBA8888, false);
+      expect(vtf.length).toBe(80 + 4 * 4 * 4);
+    });
+
+    it('should not leak a previous image through an undersized DXT input', () => {
+      // The compressor reads width * height * 4 bytes no matter how many it was
+      // given, so this used to return the previous caller's pixels.
+      convertRGBAToVTF(rgba(64, 64, 0xAB), 64, 64, VTF_FORMATS.DXT1, false);
+
+      expect(() => convertRGBAToVTF(new Uint8Array(16), 64, 64, VTF_FORMATS.DXT1, false))
+        .toThrow(/does not match 64x64/);
+    });
+  });
+
+  describe('compressToDXT', () => {
+    it('should reject data that does not match the dimensions', () => {
+      expect(() => compressToDXT(new Uint8Array(16), 64, 64, VTF_FORMATS.DXT5)).toThrow(RangeError);
+    });
+
+    it('should reject invalid dimensions', () => {
+      expect(() => compressToDXT(new Uint8Array(16), -2, -2, VTF_FORMATS.DXT5)).toThrow(RangeError);
+    });
+  });
+
+  describe('createVTFHeader', () => {
+    it('should reject dimensions that do not fit the 16-bit header fields', () => {
+      expect(() => createVTFHeader(70000, 512, VTF_FORMATS.RGBA8888)).toThrow(RangeError);
+      expect(() => createVTFHeader(512, 65536, VTF_FORMATS.RGBA8888)).toThrow(RangeError);
+    });
+
+    it('should accept the largest representable dimensions', () => {
+      const header = createVTFHeader(MAX_VTF_DIMENSION, 1, VTF_FORMATS.RGBA8888);
+      expect(header[16] | (header[17] << 8)).toBe(MAX_VTF_DIMENSION);
     });
   });
 });

@@ -186,6 +186,8 @@ Converts raw RGBA pixel data to VTF format.
 
 **Returns:** `Buffer` - VTF file data
 
+**Throws:** `RangeError` if `width` or `height` is not an integer between 1 and 65535, or if `rgbaData` is not exactly `width * height * 4` bytes.
+
 **Example:**
 
 ```javascript
